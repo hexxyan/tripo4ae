@@ -65,7 +65,7 @@ export class TripoApiService {
     const fileName = path.basename(filePath);
 
     const formData = new FormData();
-    formData.append('file', new Blob([fileBuffer]), fileName);
+    formData.append('file', new Blob([fileBuffer as any]), fileName);
 
     const response = await this.client.postMultipart<TripoApiResponse<{ image_token: string }>>(
       '/upload/sts',
