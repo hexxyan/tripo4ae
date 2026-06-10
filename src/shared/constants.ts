@@ -1,0 +1,122 @@
+import type { ModelVersion, RigType, AnimationPreset, StylizeStyle, ConvertFormat, GenerateStyle, ImageGenModel, CameraPreset, ModelPreset, EasingType, LoopType } from './types';
+
+export const TRIPO_API_BASE = 'https://api.tripo3d.ai/v2/openapi';
+
+export const MODEL_VERSIONS: { value: ModelVersion; label: string; description: string }[] = [
+  { value: 'v3.1-20260211', label: 'v3.1', description: 'Latest high-quality' },
+  { value: 'P1-20260311', label: 'P1', description: 'Low-poly optimized' },
+  { value: 'Turbo-v1.0-20250506', label: 'Turbo', description: 'Fast draft' },
+  { value: 'v3.0-20250812', label: 'v3.0', description: 'Stable v3' },
+  { value: 'v2.5-20250123', label: 'v2.5', description: 'Legacy default' },
+];
+
+export const FACE_LIMIT_PRESETS = [
+  { label: 'Low (3k)', value: 3000 },
+  { label: 'Medium (10k)', value: 10000 },
+  { label: 'High (20k)', value: 20000 },
+  { label: 'Auto', value: undefined },
+];
+
+export const GENERATE_STYLES: { value: GenerateStyle; label: string }[] = [
+  { value: 'person:person2cartoon', label: 'Person → Cartoon' },
+  { value: 'animal:venom', label: 'Animal → Venom' },
+  { value: 'object:clay', label: 'Clay' },
+  { value: 'object:steampunk', label: 'Steampunk' },
+  { value: 'object:christmas', label: 'Christmas' },
+  { value: 'object:barbie', label: 'Barbie' },
+  { value: 'gold', label: 'Gold' },
+  { value: 'ancient_bronze', label: 'Ancient Bronze' },
+];
+
+export const RIG_TYPES: { value: RigType; label: string }[] = [
+  { value: 'biped', label: 'Biped (Humanoid)' },
+  { value: 'quadruped', label: 'Quadruped' },
+  { value: 'hexapod', label: 'Hexapod (6-leg)' },
+  { value: 'octopod', label: 'Octopod (8-leg)' },
+  { value: 'avian', label: 'Avian (Bird)' },
+  { value: 'serpentine', label: 'Serpentine (Snake)' },
+  { value: 'aquatic', label: 'Aquatic (Fish)' },
+];
+
+export const BIPED_ANIMATIONS: AnimationPreset[] = [
+  'preset:biped:idle', 'preset:biped:walk', 'preset:biped:run',
+  'preset:biped:jump', 'preset:biped:fall', 'preset:biped:dive',
+  'preset:biped:dance_01', 'preset:biped:dance_02', 'preset:biped:dance_03',
+  'preset:biped:dance_04', 'preset:biped:dance_05', 'preset:biped:dance_06',
+  'preset:biped:slash', 'preset:biped:shoot', 'preset:biped:hurt',
+  'preset:biped:wave_goodbye_01', 'preset:biped:wave_goodbye_02',
+  'preset:biped:bow', 'preset:biped:clap', 'preset:biped:cheer',
+  'preset:biped:sit', 'preset:biped:hug', 'preset:biped:laugh_01',
+  'preset:biped:cry', 'preset:biped:scratch', 'preset:biped:flip',
+  'preset:biped:surf', 'preset:biped:swim', 'preset:biped:golf',
+  'preset:biped:basketball_shot', 'preset:biped:volleyball',
+  'preset:biped:football_pass', 'preset:biped:football_catch',
+  'preset:biped:sing_01', 'preset:biped:sing_02', 'preset:biped:sing_03',
+  'preset:biped:sing_04', 'preset:biped:play_video_game',
+  'preset:biped:make_a_call_01', 'preset:biped:make_a_call_02',
+];
+
+export const CROSS_SPECIES_ANIMATIONS: AnimationPreset[] = [
+  'preset:idle', 'preset:walk', 'preset:run', 'preset:dive',
+  'preset:climb', 'preset:jump', 'preset:slash', 'preset:shoot',
+  'preset:hurt', 'preset:fall', 'preset:turn',
+  'preset:quadruped:walk', 'preset:hexapod:walk', 'preset:octopod:walk',
+  'preset:serpentine:march', 'preset:aquatic:march',
+];
+
+export const CONVERT_FORMATS: { value: ConvertFormat; label: string }[] = [
+  { value: 'FBX', label: 'FBX (Animation + E3D)' },
+  { value: 'OBJ', label: 'OBJ (Static)' },
+  { value: 'GLTF', label: 'GLTF' },
+  { value: 'USDZ', label: 'USDZ (AR/iOS)' },
+  { value: 'STL', label: 'STL (Print)' },
+  { value: '3MF', label: '3MF (Print)' },
+];
+
+export const STYLIZE_STYLES: { value: StylizeStyle; label: string }[] = [
+  { value: 'lego', label: 'Lego' },
+  { value: 'voxel', label: 'Voxel' },
+  { value: 'voronoi', label: 'Voronoi' },
+  { value: 'minecraft', label: 'Minecraft' },
+  { value: 'keyring', label: 'Keyring' },
+  { value: 'fridge_magnet', label: 'Fridge Magnet' },
+  { value: 'keycap', label: 'Keycap' },
+];
+
+export const IMAGE_GEN_MODELS: { value: ImageGenModel; label: string }[] = [
+  { value: 'seedream_v4', label: 'SeeDream v4 (Default)' },
+  { value: 'flux.1_dev', label: 'FLUX.1 Dev' },
+  { value: 'flux.1_kontext_pro', label: 'FLUX.1 Kontext Pro' },
+  { value: 'gemini_2.5_flash_image_preview', label: 'Gemini 2.5 Flash' },
+];
+
+// AE Animation Presets
+export const CAMERA_PRESETS: { value: CameraPreset; label: string }[] = [
+  { value: 'orbit', label: 'Orbit' },
+  { value: 'push', label: 'Push In' },
+  { value: 'track', label: 'Track' },
+  { value: 'jib', label: 'Jib Up' },
+];
+
+export const MODEL_PRESETS: { value: ModelPreset; label: string }[] = [
+  { value: 'fade-in', label: 'Fade In' },
+  { value: 'scale-pop', label: 'Scale Pop' },
+  { value: 'flip', label: 'Flip In' },
+  { value: 'slide-in', label: 'Slide In' },
+];
+
+export const EASING_TYPES: { value: EasingType; label: string }[] = [
+  { value: 'linear', label: 'Linear' },
+  { value: 'ease-in-out', label: 'Ease In/Out' },
+  { value: 'bounce', label: 'Bounce' },
+  { value: 'elastic', label: 'Elastic' },
+];
+
+export const LOOP_TYPES: { value: LoopType; label: string }[] = [
+  { value: 'spin', label: 'Spin' },
+  { value: 'float', label: 'Float' },
+  { value: 'breathe', label: 'Breathe' },
+];
+
+export const MODEL_SAVE_DIR = 'Tripo4AE/Models';
+export const TEMPLATE_SAVE_DIR = 'Tripo4AE/Templates';
