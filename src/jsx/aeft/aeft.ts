@@ -1248,7 +1248,7 @@ export function setupScene(configJson?: string): string {
         try {
           var acceptsShadowsProp = groundMat.property("ADBE Accepts Shadows") || groundMat.property(3);
           if (acceptsShadowsProp) {
-            acceptsShadowsProp.setValue(2); // Shadows Only
+            acceptsShadowsProp.setValue(1); // On (Visible Floor)
           }
           // Turn off cast shadows for ground to prevent self-shadowing issues
           var castsShadowsProp = groundMat.property("ADBE Casts Shadows") || groundMat.property(1);
