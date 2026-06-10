@@ -1371,3 +1371,126 @@ export function createParametricMesh(configJson: string): string {
     return JSON.stringify({ ok: false, error: String(e) });
   }
 }
+
+export function alignModelToGround(): string {
+  try {
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var groundLayer = null;
+    for (var i = 1; i <= comp.numLayers; i++) {
+      if (comp.layer(i).name === "Tripo4AE_Ground") {
+        groundLayer = comp.layer(i);
+        break;
+      }
+    }
+    if (!groundLayer) {
+      return JSON.stringify({ ok: false, error: "Ground layer (Tripo4AE_Ground) not found." });
+    }
+
+    var modelLayer = null;
+    var selected = comp.selectedLayers;
+    if (selected.length > 0) {
+      for (var i = 0; i < selected.length; i++) {
+        if (selected[i].name !== "Tripo4AE_Ground" && selected[i].name !== "Tripo4AE_Background" && selected[i].name !== "Tripo4AE_CameraCtrl" && selected[i].name !== "Tripo4AE_Camera" && selected[i].threeDLayer) {
+          modelLayer = selected[i];
+          break;
+        }
+      }
+    }
+    if (!modelLayer) {
+      for (var i = 1; i <= comp.numLayers; i++) {
+        var lyr = comp.layer(i);
+        if (lyr.threeDLayer && lyr.name.indexOf("Tripo4AE") === -1 && lyr.name.indexOf("Camera") === -1) {
+          modelLayer = lyr;
+          break;
+        }
+      }
+    }
+
+    if (!modelLayer) {
+      return JSON.stringify({ ok: false, error: "No 3D model layer found to align." });
+    }
+
+    app.beginUndoGroup("Align Model to Ground");
+    var groundY = groundLayer.property("Position").value[1];
+    var rect = modelLayer.sourceRectAtTime(comp.time, false);
+    var scaleY = modelLayer.property("Scale").value[1] / 100;
+    var anchorY = modelLayer.property("Anchor Point").value[1];
+    
+    var newPosY = groundY - (rect.top + rect.height - anchorY) * scaleY;
+    var posProp = modelLayer.property("Position");
+    var currentPos = posProp.value;
+    posProp.setValue([currentPos[0], newPosY, currentPos[2]]);
+    app.endUndoGroup();
+
+    return JSON.stringify({ ok: true, data: { model: modelLayer.name, alignedY: newPosY } });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+export function alignGroundToModel(): string {
+  try {
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var groundLayer = null;
+    for (var i = 1; i <= comp.numLayers; i++) {
+      if (comp.layer(i).name === "Tripo4AE_Ground") {
+        groundLayer = comp.layer(i);
+        break;
+      }
+    }
+    if (!groundLayer) {
+      return JSON.stringify({ ok: false, error: "Ground layer (Tripo4AE_Ground) not found." });
+    }
+
+    var modelLayer = null;
+    var selected = comp.selectedLayers;
+    if (selected.length > 0) {
+      for (var i = 0; i < selected.length; i++) {
+        if (selected[i].name !== "Tripo4AE_Ground" && selected[i].name !== "Tripo4AE_Background" && selected[i].name !== "Tripo4AE_CameraCtrl" && selected[i].name !== "Tripo4AE_Camera" && selected[i].threeDLayer) {
+          modelLayer = selected[i];
+          break;
+        }
+      }
+    }
+    if (!modelLayer) {
+      for (var i = 1; i <= comp.numLayers; i++) {
+        var lyr = comp.layer(i);
+        if (lyr.threeDLayer && lyr.name.indexOf("Tripo4AE") === -1 && lyr.name.indexOf("Camera") === -1) {
+          modelLayer = lyr;
+          break;
+        }
+      }
+    }
+
+    if (!modelLayer) {
+      return JSON.stringify({ ok: false, error: "No 3D model layer found to align ground to." });
+    }
+
+    app.beginUndoGroup("Align Ground to Model");
+    var rect = modelLayer.sourceRectAtTime(comp.time, false);
+    var scaleY = modelLayer.property("Scale").value[1] / 100;
+    var posY = modelLayer.property("Position").value[1];
+    var anchorY = modelLayer.property("Anchor Point").value[1];
+    var targetGroundY = posY + (rect.top + rect.height - anchorY) * scaleY;
+    
+    var posProp = groundLayer.property("Position");
+    var currentPos = posProp.value;
+    posProp.setValue([currentPos[0], targetGroundY, currentPos[2]]);
+    app.endUndoGroup();
+
+    return JSON.stringify({ ok: true, data: { ground: groundLayer.name, alignedY: targetGroundY } });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+

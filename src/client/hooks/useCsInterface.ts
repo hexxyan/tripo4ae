@@ -202,6 +202,16 @@ export function useCsInterface() {
     [evalScript],
   );
 
+  const alignModelToGround = useCallback(
+    (): Promise<any> => evalScript('tripo4ae.alignModelToGround()'),
+    [evalScript],
+  );
+
+  const alignGroundToModel = useCallback(
+    (): Promise<any> => evalScript('tripo4ae.alignGroundToModel()'),
+    [evalScript],
+  );
+
   return {
     evalScript,
     getActiveCompInfo,
@@ -218,5 +228,7 @@ export function useCsInterface() {
     getMaterialPresets,
     setupScene,
     createParametricMesh,
+    alignModelToGround,
+    alignGroundToModel,
   };
 }

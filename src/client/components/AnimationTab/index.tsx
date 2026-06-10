@@ -493,6 +493,24 @@ export function AnimationTab() {
     }
   }, [csInterface, lightIntensity, lightColor, keyAngle, envIntensity, hdrPath, hexToRgbArray]);
 
+  const handleAlignModelToGround = useCallback(async () => {
+    setSceneError(null);
+    try {
+      await csInterface.alignModelToGround();
+    } catch (err: any) {
+      setSceneError(err.message || 'Align model to ground failed');
+    }
+  }, [csInterface]);
+
+  const handleAlignGroundToModel = useCallback(async () => {
+    setSceneError(null);
+    try {
+      await csInterface.alignGroundToModel();
+    } catch (err: any) {
+      setSceneError(err.message || 'Align ground to model failed');
+    }
+  }, [csInterface]);
+
   // Advanced PBR Material Option states
   const [pbrEditorExpanded, setPbrEditorExpanded] = useState(false);
   const [pbrAmbient, setPbrAmbient] = useState(0);
@@ -933,6 +951,16 @@ export function AnimationTab() {
         <button onClick={handleSetupScene} style={styles.actionBtn}>
           {t('sceneSetupBtn')}
         </button>
+
+        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+          <button onClick={handleAlignModelToGround} style={{ ...styles.secondaryBtn, flex: 1, margin: 0, padding: '6px 0', fontSize: '11px' }}>
+            {t('alignModelToGround')}
+          </button>
+          <button onClick={handleAlignGroundToModel} style={{ ...styles.secondaryBtn, flex: 1, margin: 0, padding: '6px 0', fontSize: '11px' }}>
+            {t('alignGroundToModel')}
+          </button>
+        </div>
+
         {sceneError && <div style={styles.error}>{sceneError}</div>}
       </div>
 
