@@ -66,6 +66,91 @@ export class TripoApiService {
       throw new Error('Node.js fs not available — CEP Node.js integration required');
     }
 
+    const dir = nodePath.dirname(savePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    // Determine if we are inside the CEP context with Node.js modules
+    const isCep = typeof window !== 'undefined' && (window as any).cep;
+
+    if (isCep) {
+      const https = (globalThis as any).require('https');
+      const http = (globalThis as any).require('http');
+
+      if (https && http) {
+        const downloadWithNode = (targetUrl: string, redirectCount = 0): Promise<string> => {
+          if (redirectCount > 5) {
+            return Promise.reject(new Error('Too many redirects'));
+          }
+
+          return new Promise((resolve, reject) => {
+            try {
+              const parsedUrl = new URL(targetUrl);
+              const protocol = parsedUrl.protocol === 'https:' ? https : http;
+
+              const requestOptions = {
+                timeout: 45000, // 45 seconds timeout
+                // Bypass SSL certificate checks if behind a proxy/firewall that intercepts certificates
+                rejectUnauthorized: false,
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+              };
+
+              const req = protocol.get(targetUrl, requestOptions, (res: any) => {
+                // Handle HTTP Redirects (301, 302, 303, 307, 308)
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                  const redirectUrl = new URL(res.headers.location, targetUrl).toString();
+                  resolve(downloadWithNode(redirectUrl, redirectCount + 1));
+                  return;
+                }
+
+                if (res.statusCode !== 200) {
+                  reject(new Error(`Failed to download model: HTTP status ${res.statusCode}`));
+                  return;
+                }
+
+                const fileStream = fs.createWriteStream(savePath);
+                res.pipe(fileStream);
+
+                fileStream.on('finish', () => {
+                  fileStream.close();
+                  resolve(savePath);
+                });
+
+                fileStream.on('error', (err: any) => {
+                  fs.unlink(savePath, () => {}); // Delete the partial file on error
+                  reject(err);
+                });
+              });
+
+              req.on('timeout', () => {
+                req.destroy();
+                fs.unlink(savePath, () => {});
+                reject(new Error('Download request timed out (45s)'));
+              });
+
+              req.on('error', (err: any) => {
+                fs.unlink(savePath, () => {});
+                reject(err);
+              });
+            } catch (urlErr) {
+              reject(urlErr);
+            }
+          });
+        };
+
+        try {
+          return await downloadWithNode(url);
+        } catch (err: any) {
+          console.warn('Node.js download failed, falling back to fetch:', err);
+          // Fallback to fetch below
+        }
+      }
+    }
+
+    // Browser/Fetch fallback (used for tests, or as a last-resort fallback)
     const response = await fetch(url, { method: 'GET' });
     if (!response.ok) {
       throw new Error(`Failed to download model: HTTP ${response.status}`);
@@ -73,12 +158,6 @@ export class TripoApiService {
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
-    const dir = nodePath.dirname(savePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
     fs.writeFileSync(savePath, buffer);
     return savePath;
   }

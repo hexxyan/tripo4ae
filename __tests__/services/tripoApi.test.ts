@@ -74,6 +74,7 @@ describe('TripoApiService', () => {
       if (moduleName === 'fs') return fs;
       if (moduleName === 'path') return jest.requireActual('path');
       if (moduleName === 'os') return { homedir: () => '/tmp' };
+      if (moduleName === 'https' || moduleName === 'http') return null;
       throw new Error(`Unexpected module require: ${moduleName}`);
     });
     api = new TripoApiService(API_KEY);
