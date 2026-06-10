@@ -1,0 +1,106 @@
+import { useCallback, useRef } from 'react';
+import type { CompInfo, AnimationConfig } from '../../shared/types';
+
+declare const CSInterface: any;
+
+function escapeForEval(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'");
+}
+
+let csInstance: any = null;
+
+function getCSInterface(): any {
+  if (!csInstance) {
+    csInstance = new CSInterface();
+  }
+  return csInstance;
+}
+
+export function useCsInterface() {
+  const csRef = useRef<any>(null);
+
+  const getCS = useCallback(() => {
+    if (!csRef.current) {
+      csRef.current = getCSInterface();
+    }
+    return csRef.current;
+  }, []);
+
+  const evalScript = useCallback(<T = any,>(script: string): Promise<T> => {
+    const cs = getCS();
+    return new Promise<T>((resolve, reject) => {
+      cs.evalScript(script, (result: string) => {
+        if (result === 'undefined' || result === undefined || result === null) {
+          resolve(undefined as T);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(result);
+          if (parsed && parsed.ok === false) {
+            reject(new Error(parsed.error || 'ExtendScript error'));
+          } else if (parsed && parsed.ok === true) {
+            resolve(parsed.data as T);
+          } else {
+            resolve(parsed as T);
+          }
+        } catch {
+          resolve(result as T);
+        }
+      });
+    });
+  }, [getCS]);
+
+  const getActiveCompInfo = useCallback(
+    (): Promise<CompInfo | null> =>
+      evalScript('tripo4ae.getActiveCompInfo()'),
+    [evalScript],
+  );
+
+  const importModel = useCallback(
+    (filePath: string): Promise<any> =>
+      evalScript(`tripo4ae.importModel('${escapeForEval(filePath)}')`),
+    [evalScript],
+  );
+
+  const applyAnimation = useCallback(
+    (config: AnimationConfig): Promise<any> => {
+      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return evalScript(`tripo4ae.applyAnimation('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const createCamera = useCallback(
+    (config: any): Promise<any> => {
+      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return evalScript(`tripo4ae.createCamera('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const createLights = useCallback(
+    (config: any): Promise<any> => {
+      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return evalScript(`tripo4ae.createLights('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const setupE3D = useCallback(
+    (filePath: string): Promise<any> =>
+      evalScript(`tripo4ae.setupE3D('${escapeForEval(filePath)}')`),
+    [evalScript],
+  );
+
+  return {
+    evalScript,
+    getActiveCompInfo,
+    importModel,
+    applyAnimation,
+    createCamera,
+    createLights,
+    setupE3D,
+  };
+}
