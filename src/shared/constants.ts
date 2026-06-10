@@ -1,4 +1,4 @@
-import type { ModelVersion, RigType, AnimationPreset, StylizeStyle, ConvertFormat, GenerateStyle, ImageGenModel, CameraPreset, ModelPreset, EasingType, LoopType } from './types';
+import type { ModelVersion, RigType, AnimationPreset, StylizeStyle, ConvertFormat, GenerateStyle, ImageGenModel, CameraPreset, ModelPreset, EasingType, LoopType, ImportWorkflow } from './types';
 
 export const TRIPO_API_BASE = 'https://api.tripo3d.ai/v2/openapi';
 
@@ -88,6 +88,12 @@ export const IMAGE_GEN_MODELS: { value: ImageGenModel; label: string }[] = [
   { value: 'flux.1_dev', label: 'FLUX.1 Dev' },
   { value: 'flux.1_kontext_pro', label: 'FLUX.1 Kontext Pro' },
   { value: 'gemini_2.5_flash_image_preview', label: 'Gemini 2.5 Flash' },
+];
+
+export const IMPORT_WORKFLOWS: { value: ImportWorkflow; label: string; description: string }[] = [
+  { value: 'advanced3d', label: 'AE Native (Advanced 3D)', description: 'Import as native 3D layer and activate Advanced 3D renderer' },
+  { value: 'project_only', label: 'Project Only', description: 'Import asset into Project panel only without placing in comp' },
+  { value: 'element3d', label: 'Element 3D (Semi-automatic)', description: 'Convert to OBJ, save to E3D folder, and setup layer (requires manual scene load)' },
 ];
 
 // AE Animation Presets

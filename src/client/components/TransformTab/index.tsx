@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
 import { TaskPoller } from '../../services/taskPoller';
+import { useCsInterface } from '../../hooks/useCsInterface';
 import { STYLIZE_STYLES, CONVERT_FORMATS } from '../../../shared/constants';
 import type {
   StylizeStyle,
@@ -9,6 +10,7 @@ import type {
   FbxPreset,
   TripoTask,
   PipelineStep,
+  ModelRecord,
 } from '../../../shared/types';
 import { ProgressBar } from '../common/ProgressBar';
 
@@ -17,6 +19,39 @@ export function TransformTab() {
   const pipeline = useStore((s) => s.pipeline);
   const addPipelineStep = useStore((s) => s.addPipelineStep);
   const updatePipelineStep = useStore((s) => s.updatePipelineStep);
+  const addModel = useStore((s) => s.addModel);
+  const csInterface = useCsInterface();
+
+  const importedTaskIds = useRef(new Set<string>());
+
+  const importTaskToAe = useCallback(async (task: TripoTask, label: string) => {
+    if (importedTaskIds.current.has(task.task_id)) return;
+    importedTaskIds.current.add(task.task_id);
+    try {
+      const api = new TripoApiService(apiKey!);
+      const modelUrl = api.getModelUrl(task.output);
+      if (!modelUrl) return;
+
+      const saveDir = TripoApiService.getModelSaveDir();
+      const localPath = await api.downloadTaskResult(task, saveDir);
+
+      await csInterface.importModel(localPath);
+
+      const model: ModelRecord = {
+        id: task.task_id,
+        taskId: task.task_id,
+        name: label,
+        thumbnailUrl: task.output?.rendered_image,
+        modelPath: localPath,
+        format: 'GLB',
+        createdAt: Date.now(),
+        pipelineSteps: [...pipeline],
+      };
+      addModel(model);
+    } catch {
+      // Non-blocking
+    }
+  }, [apiKey, csInterface, addModel, pipeline]);
 
   const modelSteps = pipeline.filter((s) => s.status === 'success' && s.taskId);
   const [modelStepIdx, setModelStepIdx] = useState(-1);
@@ -25,6 +60,7 @@ export function TransformTab() {
 
   // Task execution
   const taskIdxRef = useRef(-1);
+  const nextStepIdx = useRef(pipeline.length);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('');
   const [isRunning, setIsRunning] = useState(false);
@@ -56,8 +92,8 @@ export function TransformTab() {
         status: 'pending',
         params: params as any,
       };
+      taskIdxRef.current = nextStepIdx.current++;
       addPipelineStep(step);
-      taskIdxRef.current = pipeline.length;
 
       const newTaskId = await api.createTask(params as any);
       updatePipelineStep(taskIdxRef.current, { taskId: newTaskId, status: 'running' });
@@ -78,10 +114,14 @@ export function TransformTab() {
 
       setResult(res);
       setProgress(100);
-      setStatusText('Complete');
       if (taskIdxRef.current >= 0) {
         updatePipelineStep(taskIdxRef.current, { status: 'success', output: res.output });
       }
+
+      // E2E: auto-download → import AE → persist Library
+      setStatusText('Importing to AE...');
+      await importTaskToAe(res, `${type} result`);
+      setStatusText('Complete');
     } catch (err: any) {
       setError(err.message || 'Task failed');
       if (taskIdxRef.current >= 0) {
@@ -90,7 +130,7 @@ export function TransformTab() {
     } finally {
       setIsRunning(false);
     }
-  }, [apiKey, pipeline, getModelTaskId, addPipelineStep, updatePipelineStep]);
+  }, [apiKey, pipeline, getModelTaskId, addPipelineStep, updatePipelineStep, importTaskToAe]);
 
   // Stylize
   const [stylizeStyle, setStylizeStyle] = useState<StylizeStyle>('lego');
@@ -134,8 +174,8 @@ export function TransformTab() {
         status: 'pending',
         params: { type: 'mesh_segmentation', original_model_task_id: taskId },
       };
+      taskIdxRef.current = nextStepIdx.current++;
       addPipelineStep(step);
-      taskIdxRef.current = pipeline.length;
 
       const newTaskId = await api.createTask({
         type: 'mesh_segmentation',
@@ -160,6 +200,11 @@ export function TransformTab() {
       if (taskIdxRef.current >= 0) {
         updatePipelineStep(taskIdxRef.current, { status: 'success', output: res.output });
       }
+
+      // E2E: auto-download → import AE → persist Library
+      setStatusText('Importing to AE...');
+      await importTaskToAe(res, 'Segmented Model');
+      setStatusText('Segmentation complete');
     } catch (err: any) {
       setError(err.message);
       if (taskIdxRef.current >= 0) {

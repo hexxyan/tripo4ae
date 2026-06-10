@@ -13,7 +13,7 @@
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript" />
   <img alt="Tripo AI" src="https://img.shields.io/badge/Tripo-OpenAPI%20v2-orange" />
-  <img alt="Tests" src="https://img.shields.io/badge/tests-39%20passed-brightgreen" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-73%20passed-brightgreen" />
 </p>
 
 ---
@@ -70,6 +70,7 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 | 模型 | 淡入、缩放弹出、翻转、滑入 |
 | 循环表达式 | 旋转 (Spin)、浮动 (Float)、呼吸 (Breathe) |
 | 缓动 | 线性、缓入缓出、弹跳、弹性 |
+| PBR 材质控制 | Advanced PBR Material Options 精细面板，支持一键读取和回写 10 项材质滑块参数 |
 
 ### 🔧 变换（Transform）
 
@@ -95,7 +96,7 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 | 特性 | 说明 |
 |------|------|
 | ThreeDModelLayer 检测 | AE 24.4+ 新增的 3D 模型图层类型，脚本级精确识别 |
-| Adobe Standard Material | 12 项 PBR 属性控制：环境光、漫反射、高光、金属度、透射、反射、透明、IOR 等 |
+| Adobe Standard Material | 12 项 PBR 属性控制，面板新增 **Advanced PBR Material Options** 调节滑块，支持读取并回写 10 项核心参数（环境光、漫反射、高光强度/锐度、金属度、透光度、反射强度/锐度、透明度、折射率） |
 | 嵌入动画控制 | 选择 GLB/FBX 中的嵌入动画，通过 Time Remap 实现循环播放 |
 | HDRI 环境光 | 一键创建环境光图层，支持 HDRI 文件 |
 | 材质预设 | 8 种一键预设：默认、金属、玻璃、塑料、橡胶、陶瓷、黄金、陶土 |
@@ -114,7 +115,6 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 - **状态持久化**：Zustand + localStorage，面板吸附/取消吸附不丢失数据
 - **任务自动恢复**：面板重载后自动找到进行中的任务并继续轮询
 - **自适应轮询**：根据 API 返回的 `running_left_time` 动态调整间隔，上限 5 秒
-- **WebSocket 实时进度**：通过 Tripo WS API 接收实时更新
 
 ---
 
@@ -141,14 +141,13 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 │  │ ├ HTTP 客户端      │   │                              │
 │  │ ├ Tripo API 封装   │   │                              │
 │  │ ├ 自适应轮询器     │   │                              │
-│  │ ├ WebSocket 进度   │   │                              │
 │  │ └ Zustand 状态管理 │   │                              │
 │  └──────────────────┘   │                              │
 │                          │                              │
 ├──────────────────────────┴──────────────────────────────┤
 │                  CSInterface.js（桥接层）                 │
 └─────────────────────────────────────────────────────────┘
-          ↕ HTTP / WebSocket                  ↕ AE DOM
+          ↕ HTTP (REST API)                   ↕ AE DOM
           Tripo API v2                   After Effects
 ```
 
@@ -165,7 +164,7 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 | ExtendScript | Babel + Rollup 编译到 ES3 | `types-for-adobe` 类型支持 |
 | 构建 | Bolt CEP (`vite-cep-plugin`) | 2.x |
 | 通信 | CSInterface.js | CEP 12 |
-| API | Tripo OpenAPI v2 | REST + WebSocket |
+| API | Tripo OpenAPI v2 | REST API |
 | 认证 | Bearer API Key | |
 
 ---
@@ -228,7 +227,7 @@ npm run zxp      # 打包为 .zxp 安装包
 
 ```bash
 npx jest --runInBand
-# 4 个测试套件 / 39 个测试用例
+# 6 个测试套件 / 73 个测试用例
 ```
 
 ---
@@ -257,8 +256,7 @@ tripo4ae/
 │   │   ├── services/
 │   │   │   ├── httpClient.ts          # HTTP 客户端（重试、429 指数退避）
 │   │   │   ├── tripoApi.ts            # Tripo API 封装（创建/查询/下载/上传）
-│   │   │   ├── taskPoller.ts          # 自适应任务轮询器
-│   │   │   └── taskWsPoller.ts        # WebSocket 实时进度
+│   │   │   └── taskPoller.ts          # 自适应任务轮询器
 │   │   └── stores/
 │   │       └── useStore.ts            # Zustand 状态（含 localStorage 持久化）
 │   │
@@ -282,9 +280,16 @@ tripo4ae/
 │       ├── types.ts                   # 全部 TypeScript 类型定义（~300 行）
 │       └── constants.ts               # API 版本、预设、枚举常量
 │
-├── __tests__/                         # Jest 测试
-│   └── services/
-│       └── tripoApi.test.ts           # API 服务测试（含 CEP Node.js mock）
+├── __tests__/                         # Jest 测试（6 个套件，73 个用例）
+│   ├── aeft.test.ts                   # 宿主 ExtendScript 方法 Mock 测试
+│   ├── hooks/
+│   │   └── useCsInterface.test.ts     # CSInterface Hook 测试
+│   ├── services/
+│   │   ├── tripoApi.test.ts           # API 服务测试（含 CEP Node.js mock）
+│   │   ├── taskPoller.test.ts         # 自适应状态轮询测试
+│   │   └── httpClient.test.ts         # HTTP 客户端重试测试
+│   └── stores/
+│       └── useStore.test.ts           # Zustand 状态持久化测试
 │
 ├── CSXS/
 │   └── manifest.xml                   # CEP 扩展清单
@@ -311,13 +316,18 @@ tripo4ae/
 
 ### 第三步：导入 AE
 
-生成完成后点击 **Import to AE**：
+生成完成后点击 **Import to AE**（插件会根据当前选择的导入工作流自动处理）：
 
-1. 模型自动下载到 `~/Documents/Tripo4AE/Models/`
-2. 在当前合成创建 3D 模型图层
-3. 自动激活 Advanced 3D 渲染器
-4. 居中放置 + 启用 Time Remap
-5. 如果没有打开的合成，自动创建 1920×1080 @30fps 合成
+- **Native Advanced 3D 模式**：
+  1. 下载模型到本地 `~/Documents/Tripo4AE/Models/`
+  2. 在当前合成中创建 3D 模型图层并自动激活 Advanced 3D 渲染器
+  3. 自动居中放置并启用 Time Remap 表达式以播放内嵌骨骼动画
+  4. 如果没有打开的合成，自动创建一个 1920×1080、10 秒、30fps 的新合成
+- **Element 3D 模式**：
+  1. 自动调用 Tripo API 的 `convert_model` 将其转换为兼容的 OBJ 格式
+  2. 下载并保存至本地 `~/Documents/VideoCopilot/Models/Tripo4AE/` 模型归档目录
+  3. 在合成中自动新建名称为 `Tripo4AE_E3D` 的黑色固态层 (Solid Layer)
+  4. 自动向固态层应用 Video Copilot Element 3D 插件效果（如未安装会优雅退回提示）
 
 ### 第四步：后续处理
 

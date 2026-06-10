@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
 import { TaskPoller } from '../../services/taskPoller';
+import { useCsInterface } from '../../hooks/useCsInterface';
 import type {
   RefineModelRequest,
   TextureModelRequest,
@@ -9,6 +10,7 @@ import type {
   TextureAlignment,
   TripoTask,
   PipelineStep,
+  ModelRecord,
 } from '../../../shared/types';
 import { ProgressBar } from '../common/ProgressBar';
 import { ImageUpload } from '../common/ImageUpload';
@@ -21,6 +23,39 @@ export function RefineTextureTab() {
   const addPipelineStep = useStore((s) => s.addPipelineStep);
   const updatePipelineStep = useStore((s) => s.updatePipelineStep);
   const addModel = useStore((s) => s.addModel);
+  const csInterface = useCsInterface();
+
+  const importedTaskIds = useRef(new Set<string>());
+
+  // Auto-import completed task: download → import AE → persist Library
+  const importTaskToAe = useCallback(async (task: TripoTask, label: string) => {
+    if (importedTaskIds.current.has(task.task_id)) return;
+    importedTaskIds.current.add(task.task_id);
+    try {
+      const api = new TripoApiService(apiKey!);
+      const modelUrl = api.getModelUrl(task.output);
+      if (!modelUrl) return;
+
+      const saveDir = TripoApiService.getModelSaveDir();
+      const localPath = await api.downloadTaskResult(task, saveDir);
+
+      await csInterface.importModel(localPath);
+
+      const model: ModelRecord = {
+        id: task.task_id,
+        taskId: task.task_id,
+        name: label,
+        thumbnailUrl: task.output?.rendered_image,
+        modelPath: localPath,
+        format: 'GLB',
+        createdAt: Date.now(),
+        pipelineSteps: [...pipeline],
+      };
+      addModel(model);
+    } catch {
+      // Non-blocking: result is still visible in pipeline
+    }
+  }, [apiKey, csInterface, addModel, pipeline]);
 
   // Refine state
   const [selectedStepIdx, setSelectedStepIdx] = useState<number>(-1);
@@ -30,6 +65,7 @@ export function RefineTextureTab() {
   const [refineError, setRefineError] = useState<string | null>(null);
   const [isRefining, setIsRefining] = useState(false);
   const refineIdxRef = useRef<number>(-1);
+  const nextStepIdx = useRef(pipeline.length);
 
   // Texture state
   const [texInputMode, setTexInputMode] = useState<TextureInputMode>('text');
@@ -98,8 +134,8 @@ export function RefineTextureTab() {
         status: 'pending',
         params: req,
       };
+      refineIdxRef.current = nextStepIdx.current++;
       addPipelineStep(step);
-      refineIdxRef.current = pipeline.length;
 
       const newTaskId = await api.createTask(req);
       updatePipelineStep(refineIdxRef.current, {
@@ -130,6 +166,11 @@ export function RefineTextureTab() {
           output: result.output,
         });
       }
+
+      // E2E: auto-download → import AE → persist Library
+      setRefineStatus('Importing to AE...');
+      await importTaskToAe(result, 'Refined Model');
+      setRefineStatus('Refine complete');
     } catch (err: any) {
       setRefineError(err.message || 'Refine failed');
       if (refineIdxRef.current >= 0) {
@@ -138,7 +179,7 @@ export function RefineTextureTab() {
     } finally {
       setIsRefining(false);
     }
-  }, [selectedStepIdx, modelSteps, getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline]);
+  }, [selectedStepIdx, modelSteps, getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline, importTaskToAe]);
 
   // --- Texture ---
   const handleTexture = useCallback(async () => {
@@ -184,7 +225,7 @@ export function RefineTextureTab() {
         params: req,
       };
       addPipelineStep(step);
-      texIdxRef.current = pipeline.length;
+      texIdxRef.current = nextStepIdx.current++;
 
       const newTaskId = await api.createTask(req);
       updatePipelineStep(texIdxRef.current, {
@@ -215,6 +256,11 @@ export function RefineTextureTab() {
           output: result.output,
         });
       }
+
+      // E2E: auto-download → import AE → persist Library
+      setTexStatus('Importing to AE...');
+      await importTaskToAe(result, 'Textured Model');
+      setTexStatus('Texture complete');
     } catch (err: any) {
       setTexError(err.message || 'Texture failed');
       if (texIdxRef.current >= 0) {
@@ -225,7 +271,7 @@ export function RefineTextureTab() {
     }
   }, [texModelStepIdx, texInputMode, texPrompt, texImageToken, texStyleToken,
     texQuality, texPbr, texAlignment, texBake, texPartNames,
-    getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline]);
+    getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline, importTaskToAe]);
 
   const renderModelSelector = (
     label: string,

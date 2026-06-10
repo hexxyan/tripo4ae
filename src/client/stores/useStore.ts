@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { PipelineStep, ModelRecord, CompInfo } from '../../shared/types';
+import type { PipelineStep, ModelRecord, CompInfo, AnimTemplate } from '../../shared/types';
 
 interface TripoState {
   apiKey: string | null;
@@ -8,6 +8,7 @@ interface TripoState {
   pipeline: PipelineStep[];
   models: ModelRecord[];
   activeComp: CompInfo | null;
+  templates: AnimTemplate[];
 
   setApiKey: (key: string | null) => void;
   setBalance: (balance: number) => void;
@@ -15,8 +16,10 @@ interface TripoState {
   updatePipelineStep: (index: number, update: Partial<PipelineStep>) => void;
   clearPipeline: () => void;
   addModel: (model: ModelRecord) => void;
+  upsertModel: (model: ModelRecord) => void;
   removeModel: (id: string) => void;
   setCompInfo: (info: CompInfo | null) => void;
+  addTemplate: (template: AnimTemplate) => void;
   reset: () => void;
 }
 
@@ -26,6 +29,7 @@ const initialState = {
   pipeline: [] as PipelineStep[],
   models: [] as ModelRecord[],
   activeComp: null as CompInfo | null,
+  templates: [] as AnimTemplate[],
 };
 
 const STORE_KEY = 'tripo4ae-store';
@@ -55,12 +59,33 @@ export const useStore = create<TripoState>()(
       addModel: (model) =>
         set((state) => ({ models: [...state.models, model] })),
 
+      upsertModel: (model) =>
+        set((state) => {
+          const existingIndex = state.models.findIndex(
+            (m) =>
+              m.id === model.id ||
+              (
+                m.taskId === model.taskId &&
+                m.workflow === model.workflow
+              ),
+          );
+          if (existingIndex < 0) {
+            return { models: [...state.models, model] };
+          }
+          const models = [...state.models];
+          models[existingIndex] = { ...models[existingIndex], ...model };
+          return { models };
+        }),
+
       removeModel: (id) =>
         set((state) => ({
           models: state.models.filter((m) => m.id !== id),
         })),
 
       setCompInfo: (info) => set({ activeComp: info }),
+
+      addTemplate: (template) =>
+        set((state) => ({ templates: [...state.templates, template] })),
 
       reset: () => set(initialState),
     }),
@@ -72,6 +97,7 @@ export const useStore = create<TripoState>()(
         balance: state.balance,
         pipeline: state.pipeline,
         models: state.models,
+        templates: state.templates,
       }),
     },
   ),

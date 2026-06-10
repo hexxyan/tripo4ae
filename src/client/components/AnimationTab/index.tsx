@@ -11,6 +11,7 @@ import {
   MODEL_PRESETS,
   EASING_TYPES,
   LOOP_TYPES,
+  MATERIAL_PRESETS,
 } from '../../../shared/constants';
 import type {
   RigType,
@@ -24,6 +25,9 @@ import type {
   TripoTask,
   PipelineStep,
   AnimationConfig,
+  ModelRecord,
+  AnimTemplate,
+  MaterialPresetName,
 } from '../../../shared/types';
 import { ProgressBar } from '../common/ProgressBar';
 
@@ -117,19 +121,44 @@ function categorizeAnimations(): AnimCategory[] {
 
 const ANIM_CATEGORIES = categorizeAnimations();
 
-interface AnimTemplate {
-  id: string;
-  name: string;
-  config: AnimationConfig;
-  savedAt: number;
-}
-
 export function AnimationTab() {
   const apiKey = useStore((s) => s.apiKey);
   const pipeline = useStore((s) => s.pipeline);
   const addPipelineStep = useStore((s) => s.addPipelineStep);
   const updatePipelineStep = useStore((s) => s.updatePipelineStep);
+  const addModel = useStore((s) => s.addModel);
   const csInterface = useCsInterface();
+
+  const importedTaskIds = useRef(new Set<string>());
+
+  const importTaskToAe = useCallback(async (task: TripoTask, label: string) => {
+    if (importedTaskIds.current.has(task.task_id)) return;
+    importedTaskIds.current.add(task.task_id);
+    try {
+      const api = new TripoApiService(apiKey!);
+      const modelUrl = api.getModelUrl(task.output);
+      if (!modelUrl) return;
+
+      const saveDir = TripoApiService.getModelSaveDir();
+      const localPath = await api.downloadTaskResult(task, saveDir);
+
+      await csInterface.importModel(localPath);
+
+      const model: ModelRecord = {
+        id: task.task_id,
+        taskId: task.task_id,
+        name: label,
+        thumbnailUrl: task.output?.rendered_image,
+        modelPath: localPath,
+        format: 'GLB',
+        createdAt: Date.now(),
+        pipelineSteps: [...pipeline],
+      };
+      addModel(model);
+    } catch {
+      // Non-blocking
+    }
+  }, [apiKey, csInterface, addModel, pipeline]);
 
   // Common state
   const modelSteps = pipeline.filter((s) => s.status === 'success' && s.taskId);
@@ -138,6 +167,7 @@ export function AnimationTab() {
 
   // Task execution helper
   const taskIdxRef = useRef(-1);
+  const nextStepIdx = useRef(pipeline.length);
   const [taskProgress, setTaskProgress] = useState(0);
   const [taskStatus, setTaskStatus] = useState('');
   const [taskResult, setTaskResult] = useState<TripoTask | null>(null);
@@ -167,7 +197,7 @@ export function AnimationTab() {
         params: params as any,
       };
       addPipelineStep(step);
-      taskIdxRef.current = pipeline.length;
+      taskIdxRef.current = nextStepIdx.current++;
 
       const taskId = await api.createTask(params as any);
       updatePipelineStep(taskIdxRef.current, {
@@ -228,14 +258,19 @@ export function AnimationTab() {
   const handleRig = useCallback(async () => {
     const taskId = modelSteps[modelStepIdx]?.taskId;
     if (!taskId) { setError('Select a model'); return; }
-    await runTask('animate_rig', {
+    const result = await runTask('animate_rig', {
       type: 'animate_rig',
       original_model_task_id: taskId,
       rig_type: rigType,
       out_format: rigOutFormat,
       spec: rigSpec,
     });
-  }, [modelStepIdx, modelSteps, rigType, rigOutFormat, rigSpec, runTask]);
+    if (result) {
+      setTaskStatus('Importing rig to AE...');
+      await importTaskToAe(result, `Rigged (${rigType})`);
+      setTaskStatus('Complete');
+    }
+  }, [modelStepIdx, modelSteps, rigType, rigOutFormat, rigSpec, runTask, importTaskToAe]);
 
   // Retarget
   const [selectedAnims, setSelectedAnims] = useState<AnimationPreset[]>([]);
@@ -253,14 +288,19 @@ export function AnimationTab() {
     const taskId = modelSteps[modelStepIdx]?.taskId;
     if (!taskId) { setError('Select a model'); return; }
     if (selectedAnims.length === 0) { setError('Select at least one animation'); return; }
-    await runTask('animate_retarget', {
+    const result = await runTask('animate_retarget', {
       type: 'animate_retarget',
       original_model_task_id: taskId,
       animations: selectedAnims,
       out_format: 'glb',
       animate_in_place: animateInPlace,
     });
-  }, [modelStepIdx, modelSteps, selectedAnims, animateInPlace, runTask]);
+    if (result) {
+      setTaskStatus('Importing animated model to AE...');
+      await importTaskToAe(result, `Animated (${selectedAnims.length} anims)`);
+      setTaskStatus('Complete');
+    }
+  }, [modelStepIdx, modelSteps, selectedAnims, animateInPlace, runTask, importTaskToAe]);
 
   // AE Animation
   const [camPreset, setCamPreset] = useState<CameraPreset>('orbit');
@@ -279,6 +319,105 @@ export function AnimationTab() {
   const [breatheEnabled, setBreatheEnabled] = useState(false);
   const [breatheAmp, setBreatheAmp] = useState(5);
   const [breatheFreq, setBreatheFreq] = useState(0.5);
+
+  // Scene & Material state
+  const [sceneError, setSceneError] = useState<string | null>(null);
+  const [matPreset, setMatPreset] = useState<MaterialPresetName>('plastic');
+
+  // Advanced PBR Material Option states
+  const [pbrEditorExpanded, setPbrEditorExpanded] = useState(false);
+  const [pbrAmbient, setPbrAmbient] = useState(0);
+  const [pbrDiffuse, setPbrDiffuse] = useState(80);
+  const [pbrSpecularIntensity, setPbrSpecularIntensity] = useState(50);
+  const [pbrSpecularShininess, setPbrSpecularShininess] = useState(50);
+  const [pbrMetal, setPbrMetal] = useState(0);
+  const [pbrLightTransmission, setPbrLightTransmission] = useState(0);
+  const [pbrReflectionIntensity, setPbrReflectionIntensity] = useState(0);
+  const [pbrReflectionSharpness, setPbrReflectionSharpness] = useState(50);
+  const [pbrTransparency, setPbrTransparency] = useState(0);
+  const [pbrIndexOrRefraction, setPbrIndexOrRefraction] = useState(1.5);
+
+  const handleSetupScene = useCallback(async () => {
+    setSceneError(null);
+    try {
+      await csInterface.setupScene({ cameraDistance: 800, depthOfField: true, lightIntensity: 100 });
+    } catch (err: any) {
+      setSceneError(err.message || 'Scene setup failed');
+    }
+  }, [csInterface]);
+
+  const handleApplyMaterial = useCallback(async () => {
+    setSceneError(null);
+    try {
+      await csInterface.applyMaterialPreset({ preset: matPreset });
+    } catch (err: any) {
+      setSceneError(err.message || 'Material preset failed');
+    }
+  }, [csInterface, matPreset]);
+
+  const handleReadMaterial = useCallback(async () => {
+    setSceneError(null);
+    try {
+      const props = await csInterface.getMaterialProperties();
+      alert(JSON.stringify(props, null, 2));
+    } catch (err: any) {
+      setSceneError(err.message || 'Read material failed');
+    }
+  }, [csInterface]);
+
+  const handleReadMaterialAndSetSliders = useCallback(async () => {
+    setSceneError(null);
+    try {
+      const props = await csInterface.getMaterialProperties();
+      if (props) {
+        if (props.ambient !== undefined) setPbrAmbient(Math.round(props.ambient * 100));
+        if (props.diffuse !== undefined) setPbrDiffuse(Math.round(props.diffuse * 100));
+        if (props.specularIntensity !== undefined) setPbrSpecularIntensity(Math.round(props.specularIntensity * 100));
+        if (props.specularShininess !== undefined) setPbrSpecularShininess(Math.round(props.specularShininess * 100));
+        if (props.metal !== undefined) setPbrMetal(Math.round(props.metal * 100));
+        if (props.lightTransmission !== undefined) setPbrLightTransmission(Math.round(props.lightTransmission * 100));
+        if (props.reflectionIntensity !== undefined) setPbrReflectionIntensity(Math.round(props.reflectionIntensity * 100));
+        if (props.reflectionSharpness !== undefined) setPbrReflectionSharpness(Math.round(props.reflectionSharpness * 100));
+        if (props.transparency !== undefined) setPbrTransparency(Math.round(props.transparency * 100));
+        if (props.indexOrRefraction !== undefined) setPbrIndexOrRefraction(props.indexOrRefraction);
+      }
+    } catch (err: any) {
+      setSceneError(err.message || 'Read material failed');
+    }
+  }, [csInterface]);
+
+  const handleApplyPBRProperties = useCallback(async () => {
+    setSceneError(null);
+    try {
+      const material = {
+        ambient: pbrAmbient / 100,
+        diffuse: pbrDiffuse / 100,
+        specularIntensity: pbrSpecularIntensity / 100,
+        specularShininess: pbrSpecularShininess / 100,
+        metal: pbrMetal / 100,
+        lightTransmission: pbrLightTransmission / 100,
+        reflectionIntensity: pbrReflectionIntensity / 100,
+        reflectionSharpness: pbrReflectionSharpness / 100,
+        transparency: pbrTransparency / 100,
+        indexOrRefraction: pbrIndexOrRefraction,
+      };
+      await csInterface.setMaterialProperties({ material });
+    } catch (err: any) {
+      setSceneError(err.message || 'Apply PBR properties failed');
+    }
+  }, [
+    csInterface,
+    pbrAmbient,
+    pbrDiffuse,
+    pbrSpecularIntensity,
+    pbrSpecularShininess,
+    pbrMetal,
+    pbrLightTransmission,
+    pbrReflectionIntensity,
+    pbrReflectionSharpness,
+    pbrTransparency,
+    pbrIndexOrRefraction,
+  ]);
 
   const buildAnimConfig = useCallback((): AnimationConfig => {
     const builtLoops: AnimationConfig['loops'] = [];
@@ -307,12 +446,8 @@ export function AnimationTab() {
 
   // Templates
   const [templateName, setTemplateName] = useState('');
-  const [templates, setTemplates] = useState<AnimTemplate[]>(() => {
-    try {
-      const saved = localStorage.getItem('tripo4ae_anim_templates');
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+  const templates = useStore((s) => s.templates);
+  const addTemplate = useStore((s) => s.addTemplate);
 
   const saveTemplate = useCallback(() => {
     if (!templateName.trim()) return;
@@ -322,11 +457,9 @@ export function AnimationTab() {
       config: buildAnimConfig(),
       savedAt: Date.now(),
     };
-    const updated = [...templates, tmpl];
-    setTemplates(updated);
-    localStorage.setItem('tripo4ae_anim_templates', JSON.stringify(updated));
+    addTemplate(tmpl);
     setTemplateName('');
-  }, [templateName, buildAnimConfig, templates]);
+  }, [templateName, buildAnimConfig, addTemplate]);
 
   const loadTemplate = useCallback((tmpl: AnimTemplate) => {
     const c = tmpl.config;
@@ -446,6 +579,156 @@ export function AnimationTab() {
       {/* Progress */}
       {isRunning && <ProgressBar progress={taskProgress} status={taskStatus} />}
       {error && <div style={styles.error}>{error}</div>}
+
+      {/* Scene Setup */}
+      <div style={styles.sectionBox}>
+        <div style={styles.sectionTitle}>Scene Setup</div>
+        <p style={styles.hint}>Creates camera + 3-point lighting + environment light in the active comp.</p>
+        <button onClick={handleSetupScene} style={styles.actionBtn}>
+          Setup Scene
+        </button>
+        {sceneError && <div style={styles.error}>{sceneError}</div>}
+      </div>
+
+      {/* Material Presets */}
+      <div style={styles.sectionBox}>
+        <div style={styles.sectionTitle}>Material Presets</div>
+        <p style={styles.hint}>Select a 3D layer in AE, then apply a PBR material preset.</p>
+        <div style={styles.presetRow}>
+          {MATERIAL_PRESETS.filter((p) => p.value !== 'default').map((p) => (
+            <button
+              key={p.value}
+              onClick={() => setMatPreset(p.value as MaterialPresetName)}
+              style={matPreset === p.value ? styles.presetBtnActive : styles.presetBtn}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div style={styles.row}>
+          <button onClick={handleApplyMaterial} style={styles.actionBtn}>
+            Apply
+          </button>
+          <button onClick={handleReadMaterial} style={styles.secondaryBtn}>
+            Read Current
+          </button>
+        </div>
+        {sceneError && <div style={styles.error}>{sceneError}</div>}
+      </div>
+
+      {/* PBR Material Properties (Advanced) */}
+      <div style={styles.sectionBox}>
+        <div
+          onClick={() => setPbrEditorExpanded(!pbrEditorExpanded)}
+          style={{ ...styles.sectionTitle, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        >
+          <span>Advanced PBR Material Options</span>
+          <span>{pbrEditorExpanded ? '▼' : '▶'}</span>
+        </div>
+        {pbrEditorExpanded ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+            <button onClick={handleReadMaterialAndSetSliders} style={styles.secondaryBtn}>
+              Read from Selected Layer
+            </button>
+
+            <label style={styles.fieldLabel}>
+              Ambient: {pbrAmbient}%
+              <input
+                type="range" min={0} max={100} step={1}
+                value={pbrAmbient} onChange={(e) => setPbrAmbient(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Diffuse: {pbrDiffuse}%
+              <input
+                type="range" min={0} max={100} step={1}
+                value={pbrDiffuse} onChange={(e) => setPbrDiffuse(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Specular Intensity: {pbrSpecularIntensity}%
+              <input
+                type="range" min={0} max={100} step={1}
+                value={pbrSpecularIntensity} onChange={(e) => setPbrSpecularIntensity(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Specular Shininess (Glossiness): {pbrSpecularShininess}%
+              <input
+                type="range" min={0} max={100} step={1}
+                value={pbrSpecularShininess} onChange={(e) => setPbrSpecularShininess(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Metalness: {pbrMetal}%
+              <input
+                type="range" min={0} max={100} step={1}
+                value={pbrMetal} onChange={(e) => setPbrMetal(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Light Transmission: {pbrLightTransmission}%
+              <input
+                type="range" min={0} max={100} step={1}
+                value={pbrLightTransmission} onChange={(e) => setPbrLightTransmission(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Reflection Intensity: {pbrReflectionIntensity}%
+              <input
+                type="range" min={0} max={100} step={1}
+                value={pbrReflectionIntensity} onChange={(e) => setPbrReflectionIntensity(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Reflection Sharpness (Roughness): {pbrReflectionSharpness}%
+              <input
+                type="range" min={0} max={100} step={1}
+                value={pbrReflectionSharpness} onChange={(e) => setPbrReflectionSharpness(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Transparency: {pbrTransparency}%
+              <input
+                type="range" min={0} max={100} step={1}
+                value={pbrTransparency} onChange={(e) => setPbrTransparency(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            <label style={styles.fieldLabel}>
+              Index of Refraction (IOR): {pbrIndexOrRefraction.toFixed(2)}
+              <input
+                type="range" min={1.0} max={3.0} step={0.05}
+                value={pbrIndexOrRefraction} onChange={(e) => setPbrIndexOrRefraction(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            <button onClick={handleApplyPBRProperties} style={styles.actionBtn}>
+              Apply PBR Properties
+            </button>
+          </div>
+        ) : (
+          <p style={styles.hint}>Expand to micro-tune Ambient, Metal, Transmission, IOR, etc.</p>
+        )}
+      </div>
 
       {/* AE Animation */}
       <div style={styles.sectionBox}>
@@ -584,6 +867,11 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '6px 0', border: 'none', borderRadius: 3,
     backgroundColor: '#4a9eff', color: '#fff', fontSize: 10, fontWeight: 600, cursor: 'pointer',
   },
+  secondaryBtn: {
+    padding: '6px 0', border: '1px solid #444', borderRadius: 3,
+    backgroundColor: '#3d3d3d', color: '#aaa', fontSize: 10, cursor: 'pointer',
+  },
+  hint: { fontSize: 9, color: '#666', margin: '0 0 4px 0' },
   resultBox: { display: 'flex', flexDirection: 'column', gap: 2 },
   error: {
     padding: '4px 6px', backgroundColor: '#3a1a1a',

@@ -3,12 +3,14 @@ import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
 import { TaskPoller } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
-import { GENERATE_STYLES } from '../../../shared/constants';
+import { GENERATE_STYLES, IMPORT_WORKFLOWS } from '../../../shared/constants';
 import type {
+  ConvertModelRequest,
   TextToModelRequest,
   ImageToModelRequest,
   MultiviewToModelRequest,
   GenerateStyle,
+  ImportWorkflow,
   ModelVersion,
   TextureQuality,
   GeometryQuality,
@@ -49,7 +51,8 @@ export function GenerateTab() {
   const apiKey = useStore((s) => s.apiKey);
   const addPipelineStep = useStore((s) => s.addPipelineStep);
   const updatePipelineStep = useStore((s) => s.updatePipelineStep);
-  const addModel = useStore((s) => s.addModel);
+  const models = useStore((s) => s.models);
+  const upsertModel = useStore((s) => s.upsertModel);
   const pipeline = useStore((s) => s.pipeline);
   const csInterface = useCsInterface();
 
@@ -80,16 +83,21 @@ export function GenerateTab() {
     modelSeed: undefined as number | undefined,
     textureSeed: undefined as number | undefined,
   });
+  const [importWorkflow, setImportWorkflow] = useState<ImportWorkflow>('advanced3d');
 
   // Task state
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('');
   const [resultTask, setResultTask] = useState<TripoTask | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
 
   const pipelineIdxRef = useRef<number>(-1);
+  const nextStepIdx = useRef(pipeline.length);
   const resumedTaskRef = useRef<string | null>(null);
+  const recoveringTaskRef = useRef<string | null>(null);
 
   const getApi = useCallback(() => {
     if (!apiKey) throw new Error('API key not set');
@@ -101,12 +109,122 @@ export function GenerateTab() {
     return new TaskPoller({ getTask: (id) => api.getTask(id) });
   }, [getApi]);
 
+  const getTaskPrompt = useCallback((task: TripoTask): string => {
+    const taskPrompt = task.input?.prompt;
+    if (typeof taskPrompt === 'string' && taskPrompt.trim()) return taskPrompt.trim();
+    return prompt.trim() || 'Generated Model';
+  }, [prompt]);
+
+  const importTaskWithWorkflow = useCallback(async (
+    task: TripoTask,
+    workflow: ImportWorkflow,
+    _pipelineIndex: number,
+    forceDownload = false,
+  ) => {
+    setIsImporting(true);
+    try {
+      const api = getApi();
+      let taskToDownload = task;
+      let format = 'GLB';
+
+      if (workflow === 'element3d') {
+        const convertReq: ConvertModelRequest = {
+          type: 'convert_model',
+          original_model_task_id: task.task_id,
+          format: 'OBJ',
+        };
+        const convertStep: PipelineStep = {
+          type: 'convert_model',
+          taskId: null,
+          status: 'pending',
+          params: convertReq,
+          workflow,
+        };
+        const convertStepIndex = nextStepIdx.current++;
+        addPipelineStep(convertStep);
+        setStatusText('Converting for Element 3D...');
+        const convertTaskId = await api.createTask(convertReq);
+        updatePipelineStep(convertStepIndex, {
+          taskId: convertTaskId,
+          status: 'running',
+          workflow,
+        });
+        const convertPoller = getPoller();
+        taskToDownload = await convertPoller.pollUntilDone(convertTaskId, {
+          interval: 2000,
+          maxInterval: 5000,
+          timeout: 15 * 60 * 1000,
+          onProgress: (progressTask) => {
+            setStatusText(`Converting for Element 3D... ${progressTask.progress}%`);
+            updatePipelineStep(convertStepIndex, {
+              status: progressTask.status,
+              output: progressTask.output,
+              workflow,
+            });
+          },
+        });
+        updatePipelineStep(convertStepIndex, {
+          status: 'success',
+          output: taskToDownload.output,
+          workflow,
+        });
+        format = 'OBJ';
+      } else if (workflow === 'project_only') {
+        format = 'GLB';
+      }
+
+      const existingModel = models.find((model) => model.taskId === task.task_id && model.workflow === workflow);
+      let localPath = existingModel?.modelPath;
+
+      if (!localPath || forceDownload) {
+        setStatusText(workflow === 'element3d' ? 'Downloading OBJ...' : 'Downloading model...');
+        localPath = await api.downloadTaskResult(taskToDownload, TripoApiService.getModelSaveDir());
+      }
+
+      if (workflow === 'element3d') {
+        setStatusText('Creating Element 3D layer...');
+        await csInterface.setupE3D(localPath);
+      } else {
+        setStatusText(workflow === 'project_only' ? 'Importing into Project panel...' : 'Importing into AE...');
+        await csInterface.importModel(localPath, {
+          addToComp: workflow !== 'project_only',
+          centerInComp: workflow === 'advanced3d',
+          enableTimeRemap: workflow === 'advanced3d',
+        });
+      }
+
+      const model: ModelRecord = {
+        id: existingModel?.id || task.task_id,
+        taskId: task.task_id,
+        name: existingModel?.name || getTaskPrompt(task),
+        prompt: getTaskPrompt(task),
+        thumbnailUrl: task.output.rendered_image,
+        modelPath: localPath,
+        format,
+        workflow,
+        createdAt: existingModel?.createdAt || Date.now(),
+        pipelineSteps: [...useStore.getState().pipeline],
+      };
+      upsertModel(model);
+      setStatusText(
+        workflow === 'project_only'
+          ? 'Imported to Project panel'
+          : workflow === 'element3d'
+            ? 'Element 3D layer ready'
+            : 'Imported to AE'
+      );
+    } finally {
+      setIsImporting(false);
+    }
+  }, [addPipelineStep, csInterface, getApi, getPoller, getTaskPrompt, models, upsertModel, updatePipelineStep]);
+
   const pollGenerationTask = useCallback(async (
     taskId: string,
     pipelineIndex: number,
     resume = false,
   ) => {
     pipelineIdxRef.current = pipelineIndex;
+    setCurrentTaskId(taskId);
     setError(null);
     setResultTask(null);
     setIsGenerating(true);
@@ -124,6 +242,7 @@ export function GenerateTab() {
           updatePipelineStep(pipelineIndex, {
             status: task.status,
             output: task.output,
+            workflow: useStore.getState().pipeline[pipelineIndex]?.workflow,
           });
         },
       });
@@ -134,7 +253,20 @@ export function GenerateTab() {
       updatePipelineStep(pipelineIndex, {
         status: 'success',
         output: result.output,
+        workflow: useStore.getState().pipeline[pipelineIndex]?.workflow,
       });
+      const workflow = useStore.getState().pipeline[pipelineIndex]?.workflow || importWorkflow;
+      const existingModel = useStore.getState().models.find(
+        (model) => model.taskId === result.task_id && model.workflow === workflow,
+      );
+      if (!existingModel) {
+        try {
+          await importTaskWithWorkflow(result, workflow, pipelineIndex);
+        } catch (importErr: any) {
+          setError(`Generated, but import failed: ${importErr.message || 'Unknown error'}`);
+          setStatusText('Import failed');
+        }
+      }
     } catch (err: any) {
       setError(err.message || 'Generation failed');
       setStatusText('Failed');
@@ -145,10 +277,10 @@ export function GenerateTab() {
         resumedTaskRef.current = null;
       }
     }
-  }, [getPoller, updatePipelineStep]);
+  }, [getPoller, importTaskWithWorkflow, importWorkflow, updatePipelineStep]);
 
   useEffect(() => {
-    if (!apiKey || isGenerating) return;
+    if (!apiKey || isGenerating || isImporting) return;
 
     let index = -1;
     for (let i = pipeline.length - 1; i >= 0; i--) {
@@ -170,9 +302,53 @@ export function GenerateTab() {
     if (!taskId || resumedTaskRef.current === taskId) return;
 
     resumedTaskRef.current = taskId;
+    setCurrentTaskId(taskId);
     setProgress(0);
     void pollGenerationTask(taskId, index, true);
-  }, [apiKey, isGenerating, pipeline, pollGenerationTask]);
+  }, [apiKey, isGenerating, isImporting, pipeline, pollGenerationTask]);
+
+  useEffect(() => {
+    if (!apiKey || isGenerating || isImporting) return;
+
+    let index = -1;
+    for (let i = pipeline.length - 1; i >= 0; i--) {
+      const step = pipeline[i];
+      const workflow = step.workflow || importWorkflow;
+      const existingModel = models.find(
+        (model) => model.taskId === step.taskId && model.workflow === workflow,
+      );
+      if (
+        step.taskId &&
+        RESUMABLE_GENERATE_TYPES.has(step.type) &&
+        step.status === 'success' &&
+        !existingModel
+      ) {
+        index = i;
+        break;
+      }
+    }
+    if (index < 0) return;
+
+    const step = pipeline[index];
+    const taskId = step.taskId;
+    if (!taskId || recoveringTaskRef.current === taskId) return;
+
+    recoveringTaskRef.current = taskId;
+    setCurrentTaskId(taskId);
+    setStatusText('Recovering generated model...');
+    void (async () => {
+      try {
+        const task = await getApi().getTask(taskId);
+        setResultTask(task);
+        await importTaskWithWorkflow(task, step.workflow || importWorkflow, index);
+      } catch (recoverErr: any) {
+        setError(`Recovery failed: ${recoverErr.message || 'Unknown error'}`);
+        setStatusText('Recovery failed');
+      } finally {
+        recoveringTaskRef.current = null;
+      }
+    })();
+  }, [apiKey, getApi, importTaskWithWorkflow, importWorkflow, isGenerating, isImporting, models, pipeline]);
 
   const handleGenerate = useCallback(async () => {
     if (!apiKey) {
@@ -223,14 +399,16 @@ export function GenerateTab() {
           taskId: null,
           status: 'pending',
           params: req,
+          workflow: importWorkflow,
         };
+        pipelineIdxRef.current = nextStepIdx.current++;
         addPipelineStep(step);
-        pipelineIdxRef.current = pipeline.length;
 
         taskId = await api.createTask(req);
         updatePipelineStep(pipelineIdxRef.current, {
           taskId,
           status: 'running',
+          workflow: importWorkflow,
         });
       } else if (inputMode === 'image') {
         if (!imageToken) {
@@ -249,14 +427,16 @@ export function GenerateTab() {
           taskId: null,
           status: 'pending',
           params: req,
+          workflow: importWorkflow,
         };
+        pipelineIdxRef.current = nextStepIdx.current++;
         addPipelineStep(step);
-        pipelineIdxRef.current = pipeline.length;
 
         taskId = await api.createTask(req);
         updatePipelineStep(pipelineIdxRef.current, {
           taskId,
           status: 'running',
+          workflow: importWorkflow,
         });
       } else {
         // multiview
@@ -277,14 +457,16 @@ export function GenerateTab() {
           taskId: null,
           status: 'pending',
           params: req,
+          workflow: importWorkflow,
         };
+        pipelineIdxRef.current = nextStepIdx.current++;
         addPipelineStep(step);
-        pipelineIdxRef.current = pipeline.length;
 
         taskId = await api.createTask(req);
         updatePipelineStep(pipelineIdxRef.current, {
           taskId,
           status: 'running',
+          workflow: importWorkflow,
         });
       }
 
@@ -300,45 +482,39 @@ export function GenerateTab() {
     }
   }, [
     apiKey, inputMode, prompt, negativePrompt, style, imageToken, mvTokens,
-    params, getApi, addPipelineStep, updatePipelineStep, pipeline, pollGenerationTask,
+    importWorkflow, params, getApi, addPipelineStep, updatePipelineStep, pipeline, pollGenerationTask,
   ]);
 
   // Download model to local disk then import to AE
   const handleImport = useCallback(async () => {
     if (!resultTask) return;
     try {
-      const api = getApi();
-      const modelUrl = api.getModelUrl(resultTask.output);
-      if (!modelUrl) {
-        setError('No model URL in task result');
-        return;
+      let pipelineIndex = pipelineIdxRef.current;
+      if (pipelineIndex < 0) {
+        pipelineIndex = pipeline.findIndex((step) => step.taskId === resultTask.task_id);
       }
-
-      setStatusText('Downloading model...');
-      const saveDir = TripoApiService.getModelSaveDir();
-      const localPath = await api.downloadTaskResult(resultTask, saveDir);
-
-      setStatusText('Importing to AE...');
-      await csInterface.importModel(localPath);
-
-      const model: ModelRecord = {
-        id: resultTask.task_id,
-        taskId: resultTask.task_id,
-        name: prompt || 'Generated Model',
-        prompt: prompt,
-        thumbnailUrl: resultTask.output.rendered_image,
-        modelPath: localPath,
-        format: 'GLB',
-        createdAt: Date.now(),
-        pipelineSteps: [...pipeline],
-      };
-      addModel(model);
-      setStatusText('Complete');
+      await importTaskWithWorkflow(resultTask, importWorkflow, pipelineIndex);
     } catch (err: any) {
       setError(err.message || 'Import failed');
       setStatusText('');
     }
-  }, [resultTask, prompt, getApi, csInterface, addModel, pipeline]);
+  }, [resultTask, importWorkflow, importTaskWithWorkflow, pipeline]);
+
+  // Download model to local disk then import to AE with a specific workflow
+  const handleImportWithSpecificWorkflow = useCallback(async (workflow: ImportWorkflow) => {
+    if (!resultTask) return;
+    try {
+      let pipelineIndex = pipelineIdxRef.current;
+      if (pipelineIndex < 0) {
+        pipelineIndex = pipeline.findIndex((step) => step.taskId === resultTask.task_id);
+      }
+      setImportWorkflow(workflow);
+      await importTaskWithWorkflow(resultTask, workflow, pipelineIndex);
+    } catch (err: any) {
+      setError(err.message || 'Import failed');
+      setStatusText('');
+    }
+  }, [resultTask, importTaskWithWorkflow, pipeline, setImportWorkflow]);
 
   // Upload File object via arrayBuffer — not file.name
   const handleImageUpload = useCallback(async (file: File) => {
@@ -460,13 +636,29 @@ export function GenerateTab() {
       {/* Parameters */}
       <ParameterPanel params={params} onChange={(p) => setParams((prev) => ({ ...prev, ...p }))} />
 
+      <label style={styles.fieldLabel}>
+        Import Workflow
+        <select
+          value={importWorkflow}
+          onChange={(e) => setImportWorkflow(e.target.value as ImportWorkflow)}
+          style={styles.select}
+        >
+          {IMPORT_WORKFLOWS.map((workflow) => (
+            <option key={workflow.value} value={workflow.value}>
+              {workflow.label} — {workflow.description}
+            </option>
+          ))}
+        </select>
+      </label>
+
       {/* Error */}
       {error && <div style={styles.error}>{error}</div>}
 
       {/* Progress */}
-      {isGenerating && (
+      {(isGenerating || isImporting) && (
         <div style={styles.section}>
           <ProgressBar progress={progress} status={statusText} />
+          {currentTaskId && <div style={styles.taskMeta}>Task: {currentTaskId}</div>}
         </div>
       )}
 
@@ -483,11 +675,37 @@ export function GenerateTab() {
           )}
           <div style={styles.modelInfo}>
             <span>Task: {resultTask.task_id.slice(0, 8)}...</span>
-            <span>Credit: {resultTask.output?.consumed_credit ?? '-'}</span>
+            <span>Current: {IMPORT_WORKFLOWS.find((workflow) => workflow.value === importWorkflow)?.label}</span>
           </div>
-          <button onClick={handleImport} style={styles.importBtn}>
-            Import to AE
-          </button>
+          <div style={styles.importActions}>
+            <span style={{ fontSize: 9, color: '#aaa', margin: '2px 0' }}>Re-run import using workflow:</span>
+            <div style={styles.importSubRow}>
+              <button
+                onClick={() => handleImportWithSpecificWorkflow('advanced3d')}
+                disabled={isImporting}
+                style={importWorkflow === 'advanced3d' ? styles.activeImportSubBtn : styles.importSubBtn}
+                title="Import as native 3D layer"
+              >
+                AE Native
+              </button>
+              <button
+                onClick={() => handleImportWithSpecificWorkflow('project_only')}
+                disabled={isImporting}
+                style={importWorkflow === 'project_only' ? styles.activeImportSubBtn : styles.importSubBtn}
+                title="Import to Project panel only"
+              >
+                Project Only
+              </button>
+              <button
+                onClick={() => handleImportWithSpecificWorkflow('element3d')}
+                disabled={isImporting}
+                style={importWorkflow === 'element3d' ? styles.activeImportSubBtn : styles.importSubBtn}
+                title="Convert to OBJ and setup Element 3D layer (Semi-automatic)"
+              >
+                Element 3D
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -495,9 +713,9 @@ export function GenerateTab() {
       <div style={styles.bottomBar}>
         <button
           onClick={handleGenerate}
-          disabled={isGenerating || !apiKey}
+          disabled={isGenerating || isImporting || !apiKey}
           style={
-            isGenerating || !apiKey
+            isGenerating || isImporting || !apiKey
               ? styles.generateBtnDisabled
               : styles.generateBtn
           }
@@ -621,6 +839,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 9,
     color: '#888',
   },
+  taskMeta: {
+    fontSize: 9,
+    color: '#888',
+    wordBreak: 'break-all',
+  },
   importBtn: {
     padding: '6px 0',
     border: '1px solid #4a9eff',
@@ -630,6 +853,39 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 10,
     cursor: 'pointer',
     fontWeight: 600,
+  },
+  importActions: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+    marginTop: 4,
+  },
+  importSubRow: {
+    display: 'flex',
+    gap: 4,
+  },
+  importSubBtn: {
+    flex: 1,
+    padding: '5px 0',
+    border: '1px solid #444',
+    borderRadius: 3,
+    backgroundColor: '#3d3d3d',
+    color: '#aaa',
+    fontSize: 9,
+    cursor: 'pointer',
+    textAlign: 'center',
+  },
+  activeImportSubBtn: {
+    flex: 1,
+    padding: '5px 0',
+    border: '1px solid #4a9eff',
+    borderRadius: 3,
+    backgroundColor: '#2a3a4f',
+    color: '#4a9eff',
+    fontSize: 9,
+    cursor: 'pointer',
+    fontWeight: 600,
+    textAlign: 'center',
   },
   bottomBar: {
     paddingTop: 6,

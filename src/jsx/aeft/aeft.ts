@@ -28,8 +28,9 @@ function getEasingEase(type: string): { inEase: any[]; outEase: any[] } {
   }
 }
 
-// --- Material match names (AE 2024.4+ Advanced 3D) ---
+// --- Match name constants (verified from AE Scripting Guide) ---
 
+// Material Options (ADBE Material Options Group)
 var MAT_GROUP = "ADBE Material Options Group";
 var MAT_MAP: any = {
   ambient: "ADBE Ambient Coefficient",
@@ -44,6 +45,56 @@ var MAT_MAP: any = {
   transparency: "ADBE Transparency Coefficient",
   transparencyRolloff: "ADBE Transp Rolloff",
   indexOrRefraction: "ADBE Index of Refraction",
+};
+
+// Camera Options (ADBE Camera Options Group)
+var CAM_GROUP = "ADBE Camera Options Group";
+var CAM_MAP: any = {
+  zoom: "ADBE Camera Zoom",
+  depthOfField: "ADBE Camera Depth of Field",
+  focusDistance: "ADBE Camera Focus Distance",
+  aperture: "ADBE Camera Aperture",
+  blurLevel: "ADBE Camera Blur Level",
+  irisShape: "ADBE Camera Iris Shape",
+  irisRotation: "ADBE Camera Iris Rotation",
+  irisRoundness: "ADBE Camera Iris Roundness",
+  irisAspectRatio: "ADBE Camera Iris Aspect Ratio",
+  irisDiffractionFringe: "ADBE Camera Iris Diffraction Fringe",
+  irisHighlightGain: "ADBE Camera Iris Highlight Gain",
+  irisHighlightThreshold: "ADBE Camera Iris Highlight Threshold",
+};
+
+// Light Options (ADBE Light Options Group)
+var LIGHT_GROUP = "ADBE Light Options Group";
+var LIGHT_MAP: any = {
+  intensity: "ADBE Light Intensity",
+  color: "ADBE Light Color",
+  coneAngle: "ADBE Light Cone Angle",
+  coneFeather: "ADBE Light Cone Feather",
+  falloffType: "ADBE Light Falloff Type",
+  falloffStart: "ADBE Light Falloff Start",
+  falloffDistance: "ADBE Light Falloff Distance",
+  shadowDarkness: "ADBE Light Shadow Darkness",
+  shadowDiffusion: "ADBE Light Shadow Diffusion",
+  castsShadows: "ADBE Light Casts Shadows",
+};
+
+// Light falloff type enum values
+var FALLOFF_NONE = 0;
+var FALLOFF_SMOOTH = 1;
+var FALLOFF_INVERSE = 2;
+var FALLOFF_INVERSE_SQUARED = 3;
+
+// --- Material presets (PBR SOP) ---
+var MATERIAL_PRESETS: any = {
+  plastic: { ambient: 0, diffuse: 0.8, specularIntensity: 0.5, specularShininess: 0.1, metal: 0, reflectionIntensity: 0.05, transparency: 0 },
+  metal: { ambient: 0, diffuse: 0.4, specularIntensity: 0.9, specularShininess: 0.8, metal: 1, reflectionIntensity: 0.8, reflectionSharpness: 0.9, transparency: 0 },
+  glass: { ambient: 0, diffuse: 0.1, specularIntensity: 0.9, specularShininess: 0.9, metal: 0, reflectionIntensity: 0.5, transparency: 0.85, transparencyRolloff: 0.5, indexOrRefraction: 1.5, lightTransmission: 0.9 },
+  gold: { ambient: 0, diffuse: 0.5, specularIntensity: 0.95, specularShininess: 0.85, metal: 1, reflectionIntensity: 0.9, reflectionSharpness: 0.95, reflectionRolloff: 0.8, transparency: 0 },
+  matte: { ambient: 0.1, diffuse: 0.9, specularIntensity: 0, specularShininess: 0, metal: 0, reflectionIntensity: 0, transparency: 0 },
+  ceramic: { ambient: 0, diffuse: 0.7, specularIntensity: 0.6, specularShininess: 0.4, metal: 0, reflectionIntensity: 0.3, reflectionSharpness: 0.7, transparency: 0 },
+  rubber: { ambient: 0, diffuse: 0.9, specularIntensity: 0.15, specularShininess: 0.05, metal: 0, reflectionIntensity: 0.02, transparency: 0 },
+  crystal: { ambient: 0, diffuse: 0.05, specularIntensity: 1, specularShininess: 0.95, metal: 0, reflectionIntensity: 0.6, reflectionSharpness: 0.95, transparency: 0.9, transparencyRolloff: 0.3, indexOrRefraction: 2.0, lightTransmission: 0.95 },
 };
 
 // --- Advanced 3D renderer match names ---
@@ -147,7 +198,21 @@ export function importModel(modelPath: string, configJson?: string): string {
 
     var io = new ImportOptions(file);
     var footage = app.project.importFile(io);
+    var addToComp = config.addToComp !== false;
     var comp = app.project.activeItem;
+
+    if (!addToComp) {
+      app.endUndoGroup();
+      return JSON.stringify({
+        ok: true,
+        data: {
+          name: footage.name,
+          addedToComp: false,
+          importedToProject: true,
+          hasAdvanced3DRenderer: false,
+        },
+      });
+    }
 
     if (!comp || !(comp instanceof CompItem)) {
       comp = app.project.items.addComp(
@@ -389,7 +454,38 @@ export function createCamera(configJson: string): string {
     var duration = config.duration || 5;
     var cameraLayer = comp.layers.addCamera("Tripo4AE_Camera", [comp.width / 2, comp.height / 2]);
     cameraLayer.property("Position").setValue([comp.width / 2, comp.height / 2, -radius]);
-    cameraLayer.property("Depth of Field").setValue(1);
+
+    // Camera Options via match names
+    var camGroup = cameraLayer.property(CAM_GROUP);
+    if (camGroup) {
+      if (config.depthOfField !== undefined) {
+        try { camGroup.property(CAM_MAP.depthOfField).setValue(config.depthOfField ? 1 : 0); } catch (e) {}
+      } else {
+        try { camGroup.property(CAM_MAP.depthOfField).setValue(1); } catch (e) {}
+      }
+      if (config.focusDistance !== undefined) {
+        try { camGroup.property(CAM_MAP.focusDistance).setValue(config.focusDistance); } catch (e) {}
+      }
+      if (config.aperture !== undefined) {
+        try { camGroup.property(CAM_MAP.aperture).setValue(config.aperture); } catch (e) {}
+      }
+      if (config.blurLevel !== undefined) {
+        try { camGroup.property(CAM_MAP.blurLevel).setValue(config.blurLevel); } catch (e) {}
+      }
+      if (config.zoom !== undefined) {
+        try { camGroup.property(CAM_MAP.zoom).setValue(config.zoom); } catch (e) {}
+      }
+      // Iris properties (AE 25.0+)
+      if (config.irisShape !== undefined) {
+        try { camGroup.property(CAM_MAP.irisShape).setValue(config.irisShape); } catch (e) {}
+      }
+      if (config.irisRotation !== undefined) {
+        try { camGroup.property(CAM_MAP.irisRotation).setValue(config.irisRotation); } catch (e) {}
+      }
+      if (config.irisRoundness !== undefined) {
+        try { camGroup.property(CAM_MAP.irisRoundness).setValue(config.irisRoundness); } catch (e) {}
+      }
+    }
 
     var cx = comp.width / 2;
     var cy = comp.height / 2;
@@ -430,6 +526,36 @@ export function createCamera(configJson: string): string {
         setKeyframe(poiJib, duration, [cx, cy, 0]);
         break;
       }
+      case "dolly-zoom": {
+        // Vertigo effect: move camera in while zooming out (or vice versa)
+        var poi = cameraLayer.property("Point of Interest");
+        var posDz = cameraLayer.property("Position");
+        poi.setValue([cx, cy, 0]);
+        var startZoom = config.startZoom || 200;
+        var endZoom = config.endZoom || 800;
+        try {
+          camGroup.property(CAM_MAP.zoom).setValueAtTime(0, startZoom);
+          camGroup.property(CAM_MAP.zoom).setValueAtTime(duration, endZoom);
+        } catch (e) {}
+        setKeyframe(posDz, 0, [cx, cy, -(radius * 2)]);
+        setKeyframe(posDz, duration, [cx, cy, -(radius * 0.4)]);
+        break;
+      }
+      case "crane": {
+        // Multi-axis crane: rise + orbit + push
+        var poiCrane = cameraLayer.property("Point of Interest");
+        var posCrane = cameraLayer.property("Position");
+        var craneSteps = 24;
+        for (var ci = 0; ci <= craneSteps; ci++) {
+          var ct = (ci / craneSteps) * duration;
+          var ca = (ci / craneSteps) * Math.PI * 1.5;
+          var cr = radius * (1.5 - ci / craneSteps);
+          var cyOff = -200 + 400 * (ci / craneSteps);
+          setKeyframe(posCrane, ct, [cx + cr * Math.cos(ca), cy + cyOff, cr * Math.sin(ca)]);
+          setKeyframe(poiCrane, ct, [cx, cy, 0]);
+        }
+        break;
+      }
     }
 
     return JSON.stringify({ ok: true, data: { name: cameraLayer.name, preset: config.preset } });
@@ -455,20 +581,58 @@ export function createLights(configJson: string): string {
     var cy = comp.height / 2;
     var dist = Math.max(comp.width, comp.height);
 
+    // Light falloff config
+    var falloffType = config.falloffType !== undefined ? config.falloffType : FALLOFF_SMOOTH;
+    var falloffStart = config.falloffStart || 0;
+    var falloffDistance = config.falloffDistance || dist * 2;
+    var castShadows = config.castShadows !== undefined ? config.castShadows : true;
+    var shadowDarkness = config.shadowDarkness !== undefined ? config.shadowDarkness : 50;
+    var shadowDiffusion = config.shadowDiffusion !== undefined ? config.shadowDiffusion : 10;
+
     var lightsData = [
-      { name: "Tripo4AE_Key", x: cx + dist * Math.cos(keyAngle), y: cy - dist * 0.6, z: dist * Math.sin(keyAngle), intensity: intensity },
-      { name: "Tripo4AE_Fill", x: cx - dist * Math.cos(keyAngle), y: cy - dist * 0.3, z: dist * 0.5, intensity: intensity * fillRatio },
-      { name: "Tripo4AE_Rim", x: cx, y: cy - dist * 0.8, z: -dist * 0.8, intensity: intensity * rimRatio },
+      {
+        name: "Tripo4AE_Key", x: cx + dist * Math.cos(keyAngle), y: cy - dist * 0.6,
+        z: dist * Math.sin(keyAngle), intensity: intensity,
+        coneAngle: config.coneAngle, coneFeather: config.coneFeather,
+      },
+      {
+        name: "Tripo4AE_Fill", x: cx - dist * Math.cos(keyAngle), y: cy - dist * 0.3,
+        z: dist * 0.5, intensity: intensity * fillRatio,
+        coneAngle: undefined, coneFeather: undefined,
+      },
+      {
+        name: "Tripo4AE_Rim", x: cx, y: cy - dist * 0.8, z: -dist * 0.8,
+        intensity: intensity * rimRatio,
+        coneAngle: undefined, coneFeather: undefined,
+      },
     ];
 
     var created: string[] = [];
     for (var i = 0; i < lightsData.length; i++) {
       var ld = lightsData[i];
       var layer = comp.layers.addLight(ld.name, [ld.x, ld.y]);
+      layer.threeDLayer = true;
+      layer.property("Position").setValue([ld.x, ld.y, ld.z]);
       layer.property("Intensity").setValue(ld.intensity);
       layer.property("Color").setValue(color);
-      layer.property("Position").setValue([ld.x, ld.y, ld.z]);
-      layer.threeDLayer = true;
+
+      // Apply light options via match names
+      var lightGroup = layer.property(LIGHT_GROUP);
+      if (lightGroup) {
+        try { lightGroup.property(LIGHT_MAP.falloffType).setValue(falloffType); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.falloffStart).setValue(falloffStart); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.falloffDistance).setValue(falloffDistance); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.castsShadows).setValue(castShadows ? 1 : 0); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.shadowDarkness).setValue(shadowDarkness); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.shadowDiffusion).setValue(shadowDiffusion); } catch (e) {}
+        if (ld.coneAngle !== undefined) {
+          try { lightGroup.property(LIGHT_MAP.coneAngle).setValue(ld.coneAngle); } catch (e) {}
+        }
+        if (ld.coneFeather !== undefined) {
+          try { lightGroup.property(LIGHT_MAP.coneFeather).setValue(ld.coneFeather); } catch (e) {}
+        }
+      }
+
       created.push(ld.name);
     }
 
@@ -656,4 +820,247 @@ export function getExpression(type: string, paramsJson?: string): string {
     try { params = JSON.parse(paramsJson); } catch (e) {}
   }
   return buildExpression(type, params);
+}
+
+export function applyMaterialPreset(configJson: string): string {
+  try {
+    var config: any = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var layer = resolveLayer(comp, config.layerIndex);
+    if (!layer) {
+      return JSON.stringify({ ok: false, error: "No layer selected" });
+    }
+
+    var matGroup = layer.property(MAT_GROUP);
+    if (!matGroup) {
+      return JSON.stringify({ ok: false, error: "Layer has no Material Options. Ensure it is a 3D layer in Advanced 3D renderer." });
+    }
+
+    var presetName = config.preset || "plastic";
+    var preset = MATERIAL_PRESETS[presetName];
+    if (!preset) {
+      return JSON.stringify({ ok: false, error: "Unknown preset: " + presetName + ". Available: " + Object.keys(MATERIAL_PRESETS).join(", ") });
+    }
+
+    // Merge custom overrides on top of preset
+    var material: any = {};
+    for (var k in preset) material[k] = preset[k];
+    if (config.overrides) {
+      for (var ok in config.overrides) material[ok] = config.overrides[ok];
+    }
+
+    var applied: string[] = [];
+    for (var key in material) {
+      if (typeof material[key] === "number" && MAT_MAP[key]) {
+        try {
+          var prop = matGroup.property(MAT_MAP[key]);
+          if (prop) { prop.setValue(material[key]); applied.push(key); }
+        } catch (e) {}
+      }
+    }
+
+    return JSON.stringify({ ok: true, data: { preset: presetName, appliedProperties: applied } });
+  } catch (e) {
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+export function getMaterialPresets(): string {
+  var names = [];
+  for (var k in MATERIAL_PRESETS) names.push(k);
+  return JSON.stringify({ ok: true, data: { presets: names } });
+}
+
+export function setupScene(configJson?: string): string {
+  try {
+    var config: any = configJson ? JSON.parse(configJson) : {};
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    app.beginUndoGroup("Tripo4AE Setup Scene");
+
+    // 1. Ensure Advanced 3D renderer
+    var hasAdvanced3D = ensureAdvanced3DRenderer(comp);
+
+    var cx = comp.width / 2;
+    var cy = comp.height / 2;
+    var dist = Math.max(comp.width, comp.height);
+
+    // 2. Camera
+    var cameraLayer = comp.layers.addCamera("Tripo4AE_Camera", [cx, cy]);
+    cameraLayer.property("Position").setValue([cx, cy, -(config.cameraDistance || 800)]);
+    cameraLayer.property("Point of Interest").setValue([cx, cy, 0]);
+    var camGroup = cameraLayer.property(CAM_GROUP);
+    if (camGroup) {
+      try { camGroup.property(CAM_MAP.depthOfField).setValue(config.depthOfField !== false ? 1 : 0); } catch (e) {}
+      if (config.focusDistance) {
+        try { camGroup.property(CAM_MAP.focusDistance).setValue(config.focusDistance); } catch (e) {}
+      }
+      if (config.aperture) {
+        try { camGroup.property(CAM_MAP.aperture).setValue(config.aperture); } catch (e) {}
+      }
+    }
+
+    // 3. 3-point lighting with falloff
+    var lightIntensity = config.lightIntensity || 100;
+    var lightColor = config.lightColor || [1, 1, 1];
+    var keyAngle = ((config.keyAngle || 45) * Math.PI) / 180;
+    var lightsConfig = [
+      { name: "Tripo4AE_Key", x: cx + dist * Math.cos(keyAngle), y: cy - dist * 0.6, z: dist * Math.sin(keyAngle), int: lightIntensity },
+      { name: "Tripo4AE_Fill", x: cx - dist * Math.cos(keyAngle), y: cy - dist * 0.3, z: dist * 0.5, int: lightIntensity * 0.4 },
+      { name: "Tripo4AE_Rim", x: cx, y: cy - dist * 0.8, z: -dist * 0.8, int: lightIntensity * 0.6 },
+    ];
+
+    var createdLights: string[] = [];
+    for (var i = 0; i < lightsConfig.length; i++) {
+      var lc = lightsConfig[i];
+      var lightLayer = comp.layers.addLight(lc.name, [lc.x, lc.y]);
+      lightLayer.threeDLayer = true;
+      lightLayer.property("Position").setValue([lc.x, lc.y, lc.z]);
+      lightLayer.property("Intensity").setValue(lc.int);
+      lightLayer.property("Color").setValue(lightColor);
+      var lightGroup = lightLayer.property(LIGHT_GROUP);
+      if (lightGroup) {
+        try { lightGroup.property(LIGHT_MAP.falloffType).setValue(FALLOFF_SMOOTH); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.falloffDistance).setValue(dist * 2); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.castsShadows).setValue(1); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.shadowDarkness).setValue(50); } catch (e) {}
+      }
+      createdLights.push(lc.name);
+    }
+
+    // 4. Environment light (if Advanced 3D available)
+    var envLightCreated = false;
+    if (hasAdvanced3D) {
+      try {
+        var envLayer = comp.layers.addLight("Tripo4AE_EnvLight", [cx, cy]);
+        envLayer.threeDLayer = true;
+        envLayer.property("Intensity").setValue(config.envIntensity || 60);
+        try {
+          var envLightGroup = envLayer.property(LIGHT_GROUP);
+          if (envLightGroup) {
+            try { envLightGroup.property(LIGHT_MAP.falloffType).setValue(FALLOFF_NONE); } catch (e) {}
+          }
+        } catch (e) {}
+        // Try environment light type (AE 2025+)
+        try {
+          var lightOpts = envLayer.property("ADBE Light Options Group");
+          if (lightOpts) { try { lightOpts.property("ADBE Light Type").setValue(5); } catch (e) {} }
+        } catch (e) {}
+        envLightCreated = true;
+      } catch (e) {}
+    }
+
+    app.endUndoGroup();
+
+    return JSON.stringify({
+      ok: true,
+      data: {
+        camera: cameraLayer.name,
+        lights: createdLights,
+        environmentLight: envLightCreated,
+        hasAdvanced3D: hasAdvanced3D,
+      },
+    });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+export function createParametricMesh(configJson: string): string {
+  try {
+    var config: any = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    // Ensure Advanced 3D renderer
+    ensureAdvanced3DRenderer(comp);
+
+    app.beginUndoGroup("Tripo4AE Parametric Mesh");
+
+    var meshType = config.meshType || "Sphere"; // Sphere, Plane, Cylinder, Cone, Torus, Cube
+    var layer: any = null;
+
+    // ParametricMeshLayer is AE Beta 26.3+ — try menu command approach
+    // Falls back to solid layer with geometry effect if unavailable
+    try {
+      // Method 1: Try direct Layer > New > Parametric Mesh (AE 26.3+)
+      // The API for ParametricMeshLayer is not yet in standard ExtendScript.
+      // Use a placeholder solid + effect approach.
+      var solid = comp.layers.addSolid(
+        config.color || [0.5, 0.5, 0.5],
+        "Tripo4AE_" + meshType,
+        comp.width, comp.height, 1, comp.duration
+      );
+      solid.threeDLayer = true;
+
+      // Try to apply geometry options via match names
+      var planeGroup = solid.property("ADBE Plane Options Group");
+      var extrsnGroup = solid.property("ADBE Extrsn Options Group");
+
+      if (planeGroup) {
+        // Plane/extrusion geometry
+        if (config.curvature !== undefined) {
+          try { planeGroup.property("ADBE Plane Curvature").setValue(config.curvature); } catch (e) {}
+        }
+        if (config.segments !== undefined) {
+          try { planeGroup.property("ADBE Plane Segments").setValue(config.segments); } catch (e) {}
+        }
+      }
+
+      if (extrsnGroup) {
+        if (config.extrusionDepth !== undefined) {
+          try { extrsnGroup.property("ADBE Extrsn Depth").setValue(config.extrusionDepth); } catch (e) {}
+        }
+        if (config.bevelDepth !== undefined) {
+          try { extrsnGroup.property("ADBE Bevel Depth").setValue(config.bevelDepth); } catch (e) {}
+        }
+      }
+
+      // Position center
+      solid.property("Position").setValue([comp.width / 2, comp.height / 2]);
+
+      layer = solid;
+    } catch (e) {
+      app.endUndoGroup();
+      return JSON.stringify({ ok: false, error: "Parametric mesh not available: " + String(e) });
+    }
+
+    // Apply material preset if requested
+    if (config.materialPreset && layer) {
+      var matGroup = layer.property(MAT_GROUP);
+      if (matGroup) {
+        var preset = MATERIAL_PRESETS[config.materialPreset];
+        if (preset) {
+          for (var key in preset) {
+            if (typeof preset[key] === "number" && MAT_MAP[key]) {
+              try { matGroup.property(MAT_MAP[key]).setValue(preset[key]); } catch (e) {}
+            }
+          }
+        }
+      }
+    }
+
+    app.endUndoGroup();
+    return JSON.stringify({
+      ok: true,
+      data: {
+        meshType: meshType,
+        layerName: layer ? layer.name : meshType,
+        note: "ParametricMeshLayer requires AE 26.3+. Using solid + geometry fallback.",
+      },
+    });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
 }

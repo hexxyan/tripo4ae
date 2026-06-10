@@ -1,32 +1,21 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
+import { TaskPoller } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
-import type { ModelRecord, AnimationConfig } from '../../../shared/types';
-
-interface AnimTemplate {
-  id: string;
-  name: string;
-  config: AnimationConfig;
-  savedAt: number;
-}
+import { IMPORT_WORKFLOWS } from '../../../shared/constants';
+import type { ModelRecord, AnimTemplate } from '../../../shared/types';
 
 export function LibraryTab() {
   const models = useStore((s) => s.models);
   const removeModel = useStore((s) => s.removeModel);
+  const addModel = useStore((s) => s.addModel);
   const apiKey = useStore((s) => s.apiKey);
+  const templates = useStore((s) => s.templates);
   const csInterface = useCsInterface();
 
   const [error, setError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
-
-  // Animation templates
-  const [templates, setTemplates] = useState<AnimTemplate[]>(() => {
-    try {
-      const saved = localStorage.getItem('tripo4ae_anim_templates');
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
 
   // External import
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,7 +29,15 @@ export function LibraryTab() {
     setImportingId(model.id);
     setError(null);
     try {
-      await csInterface.importModel(model.modelPath);
+      if (model.workflow === 'element3d') {
+        await csInterface.setupE3D(model.modelPath);
+      } else {
+        await csInterface.importModel(model.modelPath, {
+          addToComp: model.workflow !== 'project_only',
+          centerInComp: model.workflow !== 'project_only',
+          enableTimeRemap: model.workflow === 'advanced3d',
+        });
+      }
     } catch (err: any) {
       setError(err.message || 'Import failed');
     } finally {
@@ -69,32 +66,38 @@ export function LibraryTab() {
         file: { type: 'file_token', file_token: token },
       });
 
-      // Wait briefly then try to import
-      const task = await api.getTask(taskId);
+      // Poll until import_model task completes
+      const poller = new TaskPoller({ getTask: (id) => api.getTask(id) });
+      const task = await poller.pollUntilDone(taskId, {
+        onProgress: () => {},
+      });
+
       const modelUrl = api.getModelUrl(task.output);
-      if (modelUrl) {
-        // Download to local first, then import
-        const saveDir = TripoApiService.getModelSaveDir();
-        const localPath = await api.downloadTaskResult(task, saveDir);
-        await csInterface.importModel(localPath);
-        const newModel: ModelRecord = {
-          id: taskId,
-          taskId,
-          name: file.name.replace(/\.[^.]+$/, ''),
-          format: 'GLB',
-          modelPath: localPath,
-          thumbnailUrl: task.output.rendered_image,
-          createdAt: Date.now(),
-          pipelineSteps: [],
-        };
-        // addModel is imported but not available here; we'd need to use the store
-      }
+      if (!modelUrl) throw new Error('No model URL in import result');
+
+      // Download to local, import to AE, persist to Library
+      const saveDir = TripoApiService.getModelSaveDir();
+      const localPath = await api.downloadTaskResult(task, saveDir);
+      await csInterface.importModel(localPath);
+
+      const newModel: ModelRecord = {
+        id: taskId,
+        taskId,
+        name: file.name.replace(/\.[^.]+$/, ''),
+        format: 'GLB',
+        modelPath: localPath,
+        thumbnailUrl: task.output?.rendered_image,
+        workflow: 'advanced3d',
+        createdAt: Date.now(),
+        pipelineSteps: [],
+      };
+      addModel(newModel);
     } catch (err: any) {
       setError(err.message || 'External import failed');
     } finally {
       setIsImporting(false);
     }
-  }, [apiKey, csInterface]);
+  }, [apiKey, csInterface, addModel]);
 
   const loadTemplate = useCallback((tmpl: AnimTemplate) => {
     // Templates are loaded from the Animation tab; just show a confirmation
@@ -180,6 +183,7 @@ export function LibraryTab() {
                 <div style={styles.modelName}>{model.name}</div>
                 <div style={styles.modelMeta}>
                   <span>{model.format}</span>
+                  <span>{IMPORT_WORKFLOWS.find((workflow) => workflow.value === model.workflow)?.label || 'AE Native'}</span>
                   <span>{formatDate(model.createdAt)}</span>
                 </div>
                 {renderPipelineDots(model.pipelineSteps)}

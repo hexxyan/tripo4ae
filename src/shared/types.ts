@@ -10,6 +10,7 @@ export type TaskType =
   | 'import_model';
 
 export type TaskStatus = 'queued' | 'running' | 'success' | 'failed' | 'cancelled' | 'unknown' | 'banned' | 'expired';
+export type ImportWorkflow = 'advanced3d' | 'project_only' | 'element3d';
 
 export type ModelVersion =
   | 'P1-20260311' | 'Turbo-v1.0-20250506'
@@ -297,6 +298,7 @@ export interface PipelineStep {
   status: TaskStatus | 'pending';
   output?: TripoTask['output'];
   params: TripoTaskRequest;
+  workflow?: ImportWorkflow;
 }
 
 // === Model Library ===
@@ -309,6 +311,7 @@ export interface ModelRecord {
   thumbnailUrl?: string;
   modelPath?: string;
   format: string;
+  workflow?: ImportWorkflow;
   faceCount?: number;
   createdAt: number;
   pipelineSteps: PipelineStep[];
@@ -346,6 +349,13 @@ export interface AnimationConfig {
   }>;
 }
 
+export interface AnimTemplate {
+  id: string;
+  name: string;
+  config: AnimationConfig;
+  savedAt: number;
+}
+
 // === AE 2026 Advanced 3D ===
 
 export interface MaterialProperties {
@@ -364,6 +374,7 @@ export interface MaterialProperties {
 }
 
 export interface ImportConfig {
+  addToComp?: boolean;
   autoScale?: boolean;
   centerInComp?: boolean;
   enableTimeRemap?: boolean;
@@ -384,4 +395,78 @@ export interface EmbeddedAnimationConfig {
   animationName?: string;
   enableTimeRemap?: boolean;
   loopAnimation?: boolean;
+}
+
+// === Material Presets ===
+
+export type MaterialPresetName = 'plastic' | 'metal' | 'glass' | 'gold' | 'matte' | 'ceramic' | 'rubber' | 'crystal';
+
+export interface MaterialPresetConfig {
+  layerIndex?: number;
+  preset: MaterialPresetName;
+  overrides?: Partial<MaterialProperties>;
+}
+
+// === Scene Setup SOP ===
+
+export interface SceneSetupConfig {
+  cameraDistance?: number;
+  depthOfField?: boolean;
+  focusDistance?: number;
+  aperture?: number;
+  lightIntensity?: number;
+  lightColor?: number[];
+  keyAngle?: number;
+  envIntensity?: number;
+}
+
+// === Parametric Mesh (AE 26.3+) ===
+
+export type ParametricMeshType = 'Sphere' | 'Plane' | 'Cylinder' | 'Cone' | 'Torus' | 'Cube';
+
+export interface ParametricMeshConfig {
+  meshType: ParametricMeshType;
+  color?: number[];
+  materialPreset?: MaterialPresetName;
+  curvature?: number;
+  segments?: number;
+  extrusionDepth?: number;
+  bevelDepth?: number;
+}
+
+// === Camera Config (enhanced) ===
+
+export interface CameraConfig {
+  preset?: CameraPreset | 'dolly-zoom' | 'crane';
+  radius?: number;
+  duration?: number;
+  offset?: number;
+  depthOfField?: boolean;
+  focusDistance?: number;
+  aperture?: number;
+  blurLevel?: number;
+  zoom?: number;
+  irisShape?: number;
+  irisRotation?: number;
+  irisRoundness?: number;
+  startZoom?: number;
+  endZoom?: number;
+}
+
+// === Lights Config (enhanced) ===
+
+export interface LightsConfig {
+  intensity?: number;
+  color?: number[];
+  keyAngle?: number;
+  fillRatio?: number;
+  rimRatio?: number;
+  falloffType?: 0 | 1 | 2 | 3;
+  falloffStart?: number;
+  falloffDistance?: number;
+  castShadows?: boolean;
+  shadowDarkness?: number;
+  shadowDiffusion?: number;
+  coneAngle?: number;
+  coneFeather?: number;
 }

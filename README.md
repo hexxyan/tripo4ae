@@ -1,6 +1,6 @@
 # Tripo4AE
 
-[中文文档](#中文)
+[中文教程](docs/tutorial-zh.md) | [English Tutorial](docs/tutorial-en.md) | [中文文档](#中文)
 
 A first-party Adobe After Effects CEP extension integrating [Tripo AI](https://platform.tripo3d.ai/)'s full 3D generation pipeline — text/image-to-3D, animation, texturing, and seamless timeline interaction — without leaving After Effects.
 
@@ -35,7 +35,7 @@ A first-party Adobe After Effects CEP extension integrating [Tripo AI](https://p
 ### AE 2026 Advanced 3D Integration
 
 - **ThreeDModelLayer** detection (AE 24.4+) for script-level 3D model identification
-- **Adobe Standard Material** — 12 PBR properties (metal, transmission, reflection, IOR, etc.) via match names
+- **Adobe Standard Material** — 12 PBR properties (metal, transmission, reflection, IOR, etc.) via match names, plus a new **Advanced PBR Material Options** slider panel to read and apply 10 core PBR properties.
 - **Embedded Animation** — select and loop GLB/FBX embedded animations via Time Remap
 - **Environment Light** — HDRI image-based lighting creation
 - **8 Material Presets** — default, metallic, glass, plastic, rubber, ceramic, gold, clay
@@ -47,7 +47,6 @@ A first-party Adobe After Effects CEP extension integrating [Tripo AI](https://p
 - **Zustand + localStorage** — state survives CEP panel reloads (docking/undocking)
 - **Auto-resume** — incomplete generation tasks automatically resume after panel reload
 - **Adaptive polling** — uses `running_left_time` with 5s max interval cap
-- **WebSocket progress** — real-time task updates via Tripo WS API
 
 ---
 
@@ -70,7 +69,7 @@ A first-party Adobe After Effects CEP extension integrating [Tripo AI](https://p
 ├─────────────────────────┴────────────────────────────┤
 │               CSInterface.js (bridge)                 │
 └──────────────────────────────────────────────────────┘
-         ↕ HTTP / WebSocket              ↕ AE DOM
+         ↕ HTTP (REST API)               ↕ AE DOM
          Tripo API v2               After Effects
 ```
 
@@ -110,8 +109,7 @@ tripo4ae/
 │   │   ├── services/
 │   │   │   ├── httpClient.ts    # Tripo HTTP client with retry
 │   │   │   ├── tripoApi.ts      # Core API calls + download/upload
-│   │   │   ├── taskPoller.ts    # Adaptive status polling
-│   │   │   └── taskWsPoller.ts  # WebSocket real-time progress
+│   │   │   └── taskPoller.ts    # Adaptive status polling
 │   │   └── stores/
 │   │       └── useStore.ts      # Zustand + localStorage persist
 │   ├── jsx/                     # ExtendScript entry (compiled to JSX bundle)
@@ -131,7 +129,7 @@ tripo4ae/
 │   └── shared/
 │       ├── types.ts             # All TypeScript interfaces
 │       └── constants.ts         # API versions, presets, enums
-├── __tests__/                   # Jest test suites (4 suites, 39 tests)
+├── __tests__/                   # Jest test suites (6 suites, 73 tests)
 ├── CSXS/
 │   └── manifest.xml             # CEP extension manifest
 ├── cep.config.ts                # Bolt CEP configuration
@@ -190,7 +188,7 @@ npm run zxp            # Package as .zxp for distribution
 ### Testing
 
 ```bash
-npx jest --runInBand   # 4 suites, 39 tests
+npx jest --runInBand   # 6 suites, 73 tests
 ```
 
 ---
@@ -210,14 +208,19 @@ Enter your Tripo API key in the header input. The key is persisted in localStora
 
 ### 3. Import to After Effects
 
-When generation completes:
+When generation completes, click **Import to AE** (the plugin automatically handles the import workflow according to your settings):
 
-- Click **Import to AE**
-- The model is downloaded to `~/Documents/Tripo4AE/Models/`
-- A 3D model layer is created in the active composition
-- Advanced 3D renderer is automatically activated
-- Time Remap is enabled for embedded animation access
-- If no comp is open, a new 1920×1080 comp is created automatically
+- **Native Advanced 3D Workflow**:
+  - The model is downloaded to `~/Documents/Tripo4AE/Models/`
+  - A 3D model layer is created in the active composition
+  - Advanced 3D renderer is automatically activated
+  - Time Remap is enabled for embedded animation access
+  - If no comp is open, a new 1920×1080 comp is created automatically
+- **Element 3D Workflow**:
+  - The plugin automatically calls Tripo API's `convert_model` to convert the GLB to OBJ
+  - Downloads the OBJ model to `~/Documents/VideoCopilot/Models/Tripo4AE/`
+  - Creates a solid layer named `Tripo4AE_E3D` in the active composition
+  - Applies Video Copilot Element 3D effect to the solid layer
 
 ### 4. Post-Process Pipeline
 
@@ -301,6 +304,47 @@ Models are downloaded to `~/Documents/Tripo4AE/Models/` before importing to AE, 
 
 ---
 
+## References & Credits
+
+### API & Services
+
+- **[Tripo AI OpenAPI v2](https://platform.tripo3d.ai/)** — 3D generation API providing text-to-model, image-to-model, rigging, animation retargeting, texturing, and format conversion. 21 endpoints integrated.
+- **[Tripo API Documentation](https://platform.tripo3d.ai/docs)** — Official API reference for request/response schemas, task types, and credit consumption.
+
+### Adobe After Effects
+
+- **[AE Scripting Guide](https://ae-scripting.docsforadobe.dev/)** — ExtendScript API reference for After Effects DOM (CompItem, Layer, Property, etc.). Source of all verified match names used in material, camera, and light control.
+- **[AE Match Names](https://ae-scripting.docsforadobe.dev/matchnames/)** — Property match names for Camera Options (`ADBE Camera Options Group`), Light Options (`ADBE Light Options Group`), Material Options (`ADBE Material Options Group`), Plane Geometry, and Extrusion.
+- **[ThreeDModelLayer (AE 24.4+)](https://ae-scripting.docsforadobe.dev/layers/threedmodellayer/)** — Subclass of AVLayer for imported 3D model files (GLB, GLTF, OBJ, FBX).
+- **[ParametricMeshLayer (AE 26.3+ Beta)](https://ae-scripting.docsforadobe.dev/layers/parametricmeshlayer/)** — Procedural geometry primitives (Sphere, Plane, Cylinder, Cone, Torus, Cube).
+- **[Adobe CEP (Common Extensibility Platform)](https://github.com/niclas-niclas/adobe-cep-starter)** — HTML5 + Node.js panel framework for Adobe host applications.
+- **[CSInterface.js](https://github.com/AdobeDocs/CEP-Resources)** — Adobe's JavaScript bridge between CEP panels and ExtendScript host.
+
+### Build Toolchain
+
+- **[Bolt CEP (`vite-cep-plugin`)](https://github.com/niclas-niclas/bolt-cep)** — Vite-based build system for CEP extensions. Provides hot-reload, JSX (ExtendScript) compilation via Babel + Rollup, ZXP packaging, and symlink management.
+- **[types-for-adobe](https://github.com/niclas-niclas/types-for-adobe)** — TypeScript type definitions for Adobe ExtendScript host objects (app, CompItem, Layer, Property, etc.).
+- **[Vite](https://vitejs.dev/)** — Next-generation frontend build tool powering the CEP panel's React development server and production builds.
+- **[Rollup](https://rollupjs.org/)** — Module bundler used for compiling ExtendScript (JSX) bundle targeting ES3/ES5.
+- **[Babel](https://babeljs.io/)** — JavaScript transpiler that downlevels TypeScript/ES6+ ExtendScript code to ES3 compatible output.
+
+### Frontend Stack
+
+- **[React 19](https://react.dev/)** — UI library for the CEP panel. Functional components with hooks.
+- **[Zustand](https://zustand.docs.pmnd.rs/)** — Lightweight state management with `persist` middleware for localStorage survival across panel reloads.
+- **[TypeScript](https://www.typescriptlang.org/)** — Type-safe development for both CEP panel and shared types.
+
+### Testing
+
+- **[Jest](https://jestjs.io/)** — Test framework. 4 suites covering HTTP client, API service, task poller, and store.
+- **[Testing Library](https://testing-library.com/)** — React component testing utilities.
+
+### Third-Party Plugins (Referenced)
+
+- **[Element 3D (Video Copilot)](https://www.videocopilot.net/products/element3d/)** — Commercial AE plugin for 3D model rendering (legacy, AE 2024 only). No public scripting API available — integration via solid layer + effect application.
+
+---
+
 ## License
 
 Private project. All rights reserved.
@@ -344,7 +388,7 @@ Private project. All rights reserved.
 ### AE 2026 高级 3D 集成
 
 - **ThreeDModelLayer 检测**（AE 24.4+）— 脚本级 3D 模型图层识别
-- **Adobe Standard Material** — 12 项 PBR 属性（金属、透射、反射、IOR 等）通过 match name 控制
+- **Adobe Standard Material** — 12 项 PBR 属性（金属、透射、反射、IOR 等）通过 match name 控制，面板新增 **Advanced PBR Material Options** 调节滑块，支持读取并一键回写 10 项核心参数
 - **嵌入动画** — 通过 Time Remap 选择并循环 GLB/FBX 中的嵌入动画
 - **环境光** — 创建 HDRI 图像照明
 - **8 种材质预设** — 默认、金属、玻璃、塑料、橡胶、陶瓷、黄金、陶土
@@ -356,7 +400,6 @@ Private project. All rights reserved.
 - **Zustand + localStorage** — 面板重载（吸附/取消吸附）后状态不丢失
 - **自动恢复** — 面板重载后自动继续未完成的生成任务
 - **自适应轮询** — 根据 `running_left_time` 智能调整，最大间隔 5 秒
-- **WebSocket 实时进度** — 通过 Tripo WS API 获取实时任务更新
 
 ---
 
@@ -379,7 +422,7 @@ Private project. All rights reserved.
 ├─────────────────────────┴────────────────────────────┤
 │               CSInterface.js（桥接层）                │
 └──────────────────────────────────────────────────────┘
-         ↕ HTTP / WebSocket              ↕ AE DOM
+         ↕ HTTP (REST API)               ↕ AE DOM
          Tripo API v2               After Effects
 ```
 
@@ -450,7 +493,7 @@ npm run zxp            # 打包为 .zxp 用于分发
 ### 测试
 
 ```bash
-npx jest --runInBand   # 4 个测试套件，39 个测试
+npx jest --runInBand   # 6 个测试套件，73 个测试
 ```
 
 ---
@@ -470,14 +513,18 @@ npx jest --runInBand   # 4 个测试套件，39 个测试
 
 ### 3. 导入 After Effects
 
-生成完成后：
+生成完成后点击 **Import to AE**（插件会根据当前选择的工作流自动处理）：
 
-- 点击 **Import to AE**
-- 模型自动下载到 `~/Documents/Tripo4AE/Models/`
-- 在当前合成中创建 3D 模型图层
-- 自动激活 Advanced 3D 渲染器
-- 启用 Time Remap 以访问嵌入动画
-- 如果没有打开的合成，自动创建 1920×1080 合成
+- **Native Advanced 3D 模式**：
+  - 模型自动下载到 `~/Documents/Tripo4AE/Models/`
+  - 在当前合成中创建 3D 模型图层并自动激活 Advanced 3D 渲染器
+  - 自动居中放置并启用 Time Remap
+  - 如果没有打开的合成，自动创建 1920×1080 合成
+- **Element 3D 模式**：
+  - 自动调用 Tripo API 将 GLB 转换为 OBJ 格式
+  - 下载并保存至本地 `~/Documents/VideoCopilot/Models/Tripo4AE/` 目录
+  - 在合成中自动创建名称为 `Tripo4AE_E3D` 的固态图层
+  - 自动在图层上添加 Video Copilot Element 3D 效果
 
 ### 4. 后续处理管线
 
@@ -558,3 +605,44 @@ pbr_model > model > base_model
 5. **运行时 require() 获取 Node.js** — CEP 通过 `require()` 提供 Node.js。使用运行时 require 而非静态 `import fs` 避免 Vite 外部化问题。
 6. **Zustand + 持久化** — 轻量、无需 Provider、易于 localStorage 持久化，面板重载不丢数据。
 7. **Bolt CEP** — 成熟的脚手架，支持热重载、JSX 编译、ZXP 打包。
+
+---
+
+## 参考文献与致谢
+
+### API 与服务
+
+- **[Tripo AI OpenAPI v2](https://platform.tripo3d.ai/)** — 3D 生成 API，提供文本转模型、图片转模型、骨骼绑定、动画重定向、纹理贴图、格式转换等功能。集成 21 个端点。
+- **[Tripo API 文档](https://platform.tripo3d.ai/docs)** — 官方 API 参考，包含请求/响应结构、任务类型、积分消耗说明。
+
+### Adobe After Effects
+
+- **[AE 脚本指南](https://ae-scripting.docsforadobe.dev/)** — After Effects DOM 的 ExtendScript API 参考（CompItem、Layer、Property 等）。本项目中所有材质、摄像机、灯光的 match name 均来源于此。
+- **[AE Match Names](https://ae-scripting.docsforadobe.dev/matchnames/)** — Camera Options（`ADBE Camera Options Group`）、Light Options（`ADBE Light Options Group`）、Material Options（`ADBE Material Options Group`）、平面几何、挤出等属性的 match name。
+- **[ThreeDModelLayer（AE 24.4+）](https://ae-scripting.docsforadobe.dev/layers/threedmodellayer/)** — AVLayer 子类，用于导入的 3D 模型文件（GLB、GLTF、OBJ、FBX）。
+- **[ParametricMeshLayer（AE 26.3+ Beta）](https://ae-scripting.docsforadobe.dev/layers/parametricmeshlayer/)** — 程序化几何体基本体（球体、平面、圆柱、圆锥、环面、立方体）。
+- **[Adobe CEP（通用扩展平台）](https://github.com/niclas-niclas/adobe-cep-starter)** — Adobe 宿主应用的 HTML5 + Node.js 面板框架。
+- **[CSInterface.js](https://github.com/AdobeDocs/CEP-Resources)** — Adobe 提供的 JavaScript 桥接库，连接 CEP 面板与 ExtendScript 宿主。
+
+### 构建工具链
+
+- **[Bolt CEP（`vite-cep-plugin`）](https://github.com/niclas-niclas/bolt-cep)** — 基于 Vite 的 CEP 扩展构建系统。提供热重载、JSX（ExtendScript）编译（Babel + Rollup）、ZXP 打包、符号链接管理。
+- **[types-for-adobe](https://github.com/niclas-niclas/types-for-adobe)** — Adobe ExtendScript 宿主对象的 TypeScript 类型定义（app、CompItem、Layer、Property 等）。
+- **[Vite](https://vitejs.dev/)** — 新一代前端构建工具，驱动 CEP 面板的 React 开发服务器和生产构建。
+- **[Rollup](https://rollupjs.org/)** — 模块打包器，用于编译 ExtendScript（JSX）bundle，目标为 ES3/ES5。
+- **[Babel](https://babeljs.io/)** — JavaScript 转译器，将 TypeScript/ES6+ 的 ExtendScript 代码降级为 ES3 兼容输出。
+
+### 前端技术栈
+
+- **[React 19](https://react.dev/)** — CEP 面板 UI 库。函数组件 + Hooks。
+- **[Zustand](https://zustand.docs.pmnd.rs/)** — 轻量状态管理，配合 `persist` 中间件实现 localStorage 持久化，面板重载后数据不丢失。
+- **[TypeScript](https://www.typescriptlang.org/)** — 类型安全开发，覆盖 CEP 面板和共享类型定义。
+
+### 测试
+
+- **[Jest](https://jestjs.io/)** — 测试框架。4 个测试套件覆盖 HTTP 客户端、API 服务、任务轮询和状态管理。
+- **[Testing Library](https://testing-library.com/)** — React 组件测试工具。
+
+### 第三方插件（参考）
+
+- **[Element 3D（Video Copilot）](https://www.videocopilot.net/products/element3d/)** — 商业 AE 3D 模型渲染插件（旧版，仅 AE 2024）。无公开脚本 API — 通过纯色图层 + 效果应用方式集成。

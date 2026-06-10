@@ -136,6 +136,38 @@ export function useCsInterface() {
     [evalScript],
   );
 
+  const applyMaterialPreset = useCallback(
+    (config: { layerIndex?: number; preset: string; overrides?: Record<string, number> }): Promise<any> => {
+      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return evalScript(`tripo4ae.applyMaterialPreset('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const getMaterialPresets = useCallback(
+    (): Promise<any> => evalScript('tripo4ae.getMaterialPresets()'),
+    [evalScript],
+  );
+
+  const setupScene = useCallback(
+    (config?: Record<string, any>): Promise<any> => {
+      if (config) {
+        const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return evalScript(`tripo4ae.setupScene('${json}')`);
+      }
+      return evalScript('tripo4ae.setupScene()');
+    },
+    [evalScript],
+  );
+
+  const createParametricMesh = useCallback(
+    (config: { meshType: string; color?: number[]; materialPreset?: string; curvature?: number; segments?: number; extrusionDepth?: number; bevelDepth?: number }): Promise<any> => {
+      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return evalScript(`tripo4ae.createParametricMesh('${json}')`);
+    },
+    [evalScript],
+  );
+
   return {
     evalScript,
     getActiveCompInfo,
@@ -148,5 +180,9 @@ export function useCsInterface() {
     setMaterialProperties,
     getMaterialProperties,
     createEnvironmentLight,
+    applyMaterialPreset,
+    getMaterialPresets,
+    setupScene,
+    createParametricMesh,
   };
 }
