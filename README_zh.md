@@ -126,35 +126,31 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 
 ## 系统架构
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      Tripo4AE 插件                       │
-├──────────────────────────┬──────────────────────────────┤
-│                          │                              │
-│    CEP 面板 (React)      │     ExtendScript (.jsx)      │
-│                          │                              │
-│  ┌──────────────────┐   │   ┌────────────────────┐    │
-│  │ 5 个功能标签页     │   │   │ 12 个宿主函数       │    │
-│  │ ├ 生成            │   │   │ ├ 导入 3D 模型      │    │
-│  │ ├ 精修与纹理      │   │   │ ├ 关键帧动画        │    │
-│  │ ├ 动画            │   │   │ ├ 摄像机预设        │    │
-│  │ ├ 变换            │   │   │ ├ 三点布光          │    │
-│  │ └ 模型库          │   │   │ ├ PBR 材质控制      │    │
-│  └──────────────────┘   │   │ ├ 环境光            │    │
-│                          │   │ ├ 嵌入动画控制      │    │
-│  ┌──────────────────┐   │   │ └ 表达式循环        │    │
-│  │ 服务层             │   │   └────────────────────┘    │
-│  │ ├ HTTP 客户端      │   │                              │
-│  │ ├ Tripo API 封装   │   │                              │
-│  │ ├ 自适应轮询器     │   │                              │
-│  │ └ Zustand 状态管理 │   │                              │
-│  └──────────────────┘   │                              │
-│                          │                              │
-├──────────────────────────┴──────────────────────────────┤
-│                  CSInterface.js（桥接层）                 │
-└─────────────────────────────────────────────────────────┘
-          ↕ HTTP (REST API)                   ↕ AE DOM
-          Tripo API v2                   After Effects
+```mermaid
+graph TD
+    subgraph Panel ["Tripo4AE 插件面板 (跨平台)"]
+        subgraph CEP ["CEP 面板层 (React + TS)"]
+            UI["UI 界面层 (5大功能标签页)"]
+            Store["Zustand 状态库 (本地持久化)"]
+            Service["服务层 (httpClient, tripoApi, taskPoller)"]
+        end
+        
+        Bridge["CSInterface.js (JS 桥接通道)"]
+        
+        subgraph JSX ["ExtendScript 宿主层 (.jsx/.ts)"]
+            Host["12 个 AE 宿主 DOM 函数 (模型导入, 摄像机, 灯光, 材质, 表达式)"]
+        end
+    end
+    
+    API["Tripo API v2 (云端 REST 接口)"]
+    AE["After Effects (宿主软件 DOM)"]
+
+    UI --> Store
+    UI --> Service
+    Service -->|HTTP 请求 & 文件下载| API
+    UI -->|evalScript 调用| Bridge
+    Bridge -->|桥接执行| Host
+    Host -->|直接操作 AE DOM| AE
 ```
 
 **核心原则**：所有耗时操作（网络请求、轮询、文件下载）在 CEP/React/Node 异步层完成。ExtendScript 只做简短的 AE DOM 操作，避免 UI 冻结。
