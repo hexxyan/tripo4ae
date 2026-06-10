@@ -43,18 +43,39 @@ describe('TripoApiService', () => {
   let api: TripoApiService;
   const API_KEY = 'test-api-key-123';
   let originalFetch: typeof globalThis.fetch | undefined;
+  let originalCep: unknown;
+  let originalRequire: unknown;
 
   beforeAll(() => {
     originalFetch = globalThis.fetch;
+    originalCep = (window as any).cep;
+    originalRequire = (globalThis as any).require;
   });
 
   afterAll(() => {
     globalThis.fetch = originalFetch;
+    if (originalCep === undefined) {
+      delete (window as any).cep;
+    } else {
+      (window as any).cep = originalCep;
+    }
+    if (originalRequire === undefined) {
+      delete (globalThis as any).require;
+    } else {
+      (globalThis as any).require = originalRequire;
+    }
   });
 
   beforeEach(() => {
     jest.restoreAllMocks();
     globalThis.fetch = jest.fn();
+    (window as any).cep = {};
+    (globalThis as any).require = jest.fn((moduleName: string) => {
+      if (moduleName === 'fs') return fs;
+      if (moduleName === 'path') return jest.requireActual('path');
+      if (moduleName === 'os') return { homedir: () => '/tmp' };
+      throw new Error(`Unexpected module require: ${moduleName}`);
+    });
     api = new TripoApiService(API_KEY);
 
     // Reset fs mocks
@@ -172,15 +193,10 @@ describe('TripoApiService', () => {
       const savePath = '/tmp/test-model.glb';
       const binaryData = new Uint8Array([1, 2, 3, 4, 5]);
 
-      // Create a proper mock Blob with arrayBuffer
-      const mockBlob = {
-        arrayBuffer: async () => binaryData.buffer,
-      } as unknown as Blob;
-
       const blobResp = {
         ok: true,
         status: 200,
-        blob: async () => mockBlob,
+        arrayBuffer: async () => binaryData.buffer,
       } as unknown as Response;
 
       const fetchMock = jest.fn().mockResolvedValue(blobResp);
@@ -210,14 +226,10 @@ describe('TripoApiService', () => {
 
       (fs.existsSync as jest.Mock).mockReturnValue(false);
 
-      const mockBlob = {
-        arrayBuffer: async () => binaryData.buffer,
-      } as unknown as Blob;
-
       const blobResp = {
         ok: true,
         status: 200,
-        blob: async () => mockBlob,
+        arrayBuffer: async () => binaryData.buffer,
       } as unknown as Response;
 
       globalThis.fetch = jest.fn().mockResolvedValue(blobResp);

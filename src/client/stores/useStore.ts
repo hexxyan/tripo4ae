@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import type { PipelineStep, ModelRecord, CompInfo } from '../../shared/types';
 
 interface TripoState {
@@ -27,35 +28,51 @@ const initialState = {
   activeComp: null as CompInfo | null,
 };
 
-export const useStore = create<TripoState>()((set) => ({
-  ...initialState,
+const STORE_KEY = 'tripo4ae-store';
 
-  setApiKey: (key) => set({ apiKey: key }),
+export const useStore = create<TripoState>()(
+  persist(
+    (set) => ({
+      ...initialState,
 
-  setBalance: (balance) => set({ balance }),
+      setApiKey: (key) => set({ apiKey: key }),
 
-  addPipelineStep: (step) =>
-    set((state) => ({ pipeline: [...state.pipeline, step] })),
+      setBalance: (balance) => set({ balance }),
 
-  updatePipelineStep: (index, update) =>
-    set((state) => {
-      if (index < 0 || index >= state.pipeline.length) return state;
-      const pipeline = [...state.pipeline];
-      pipeline[index] = { ...pipeline[index], ...update };
-      return { pipeline };
+      addPipelineStep: (step) =>
+        set((state) => ({ pipeline: [...state.pipeline, step] })),
+
+      updatePipelineStep: (index, update) =>
+        set((state) => {
+          if (index < 0 || index >= state.pipeline.length) return state;
+          const pipeline = [...state.pipeline];
+          pipeline[index] = { ...pipeline[index], ...update };
+          return { pipeline };
+        }),
+
+      clearPipeline: () => set({ pipeline: [] }),
+
+      addModel: (model) =>
+        set((state) => ({ models: [...state.models, model] })),
+
+      removeModel: (id) =>
+        set((state) => ({
+          models: state.models.filter((m) => m.id !== id),
+        })),
+
+      setCompInfo: (info) => set({ activeComp: info }),
+
+      reset: () => set(initialState),
     }),
-
-  clearPipeline: () => set({ pipeline: [] }),
-
-  addModel: (model) =>
-    set((state) => ({ models: [...state.models, model] })),
-
-  removeModel: (id) =>
-    set((state) => ({
-      models: state.models.filter((m) => m.id !== id),
-    })),
-
-  setCompInfo: (info) => set({ activeComp: info }),
-
-  reset: () => set(initialState),
-}));
+    {
+      name: STORE_KEY,
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        apiKey: state.apiKey,
+        balance: state.balance,
+        pipeline: state.pipeline,
+        models: state.models,
+      }),
+    },
+  ),
+);

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
 import { TaskPoller } from '../../services/taskPoller';
@@ -25,6 +25,11 @@ type InputMode = 'text' | 'image' | 'multiview';
 
 // P1 version doesn't support quad, geometry_quality, texture_quality, style
 const P1_VERSION = 'P1-20260311';
+const RESUMABLE_GENERATE_TYPES = new Set([
+  'text_to_model',
+  'image_to_model',
+  'multiview_to_model',
+]);
 
 function isP1(version: ModelVersion): boolean {
   return version === P1_VERSION;
@@ -84,6 +89,7 @@ export function GenerateTab() {
   const [error, setError] = useState<string | null>(null);
 
   const pipelineIdxRef = useRef<number>(-1);
+  const resumedTaskRef = useRef<string | null>(null);
 
   const getApi = useCallback(() => {
     if (!apiKey) throw new Error('API key not set');
@@ -94,6 +100,79 @@ export function GenerateTab() {
     const api = getApi();
     return new TaskPoller({ getTask: (id) => api.getTask(id) });
   }, [getApi]);
+
+  const pollGenerationTask = useCallback(async (
+    taskId: string,
+    pipelineIndex: number,
+    resume = false,
+  ) => {
+    pipelineIdxRef.current = pipelineIndex;
+    setError(null);
+    setResultTask(null);
+    setIsGenerating(true);
+    setStatusText(resume ? 'Resuming generation...' : 'Generating...');
+
+    try {
+      const poller = getPoller();
+      const result = await poller.pollUntilDone(taskId, {
+        interval: 2000,
+        maxInterval: 5000,
+        timeout: 15 * 60 * 1000,
+        onProgress: (task) => {
+          setProgress(task.progress);
+          setStatusText(`Generating... ${task.progress}%`);
+          updatePipelineStep(pipelineIndex, {
+            status: task.status,
+            output: task.output,
+          });
+        },
+      });
+
+      setResultTask(result);
+      setProgress(100);
+      setStatusText('Complete');
+      updatePipelineStep(pipelineIndex, {
+        status: 'success',
+        output: result.output,
+      });
+    } catch (err: any) {
+      setError(err.message || 'Generation failed');
+      setStatusText('Failed');
+      updatePipelineStep(pipelineIndex, { status: 'failed' });
+    } finally {
+      setIsGenerating(false);
+      if (resumedTaskRef.current === taskId) {
+        resumedTaskRef.current = null;
+      }
+    }
+  }, [getPoller, updatePipelineStep]);
+
+  useEffect(() => {
+    if (!apiKey || isGenerating) return;
+
+    let index = -1;
+    for (let i = pipeline.length - 1; i >= 0; i--) {
+      const step = pipeline[i];
+      if (
+        step.taskId &&
+        RESUMABLE_GENERATE_TYPES.has(step.type) &&
+        (step.status === 'pending' ||
+          step.status === 'queued' ||
+          step.status === 'running')
+      ) {
+        index = i;
+        break;
+      }
+    }
+    if (index < 0) return;
+
+    const taskId = pipeline[index].taskId;
+    if (!taskId || resumedTaskRef.current === taskId) return;
+
+    resumedTaskRef.current = taskId;
+    setProgress(0);
+    void pollGenerationTask(taskId, index, true);
+  }, [apiKey, isGenerating, pipeline, pollGenerationTask]);
 
   const handleGenerate = useCallback(async () => {
     if (!apiKey) {
@@ -209,32 +288,7 @@ export function GenerateTab() {
         });
       }
 
-      setStatusText('Generating...');
-
-      const poller = getPoller();
-      const result = await poller.pollUntilDone(taskId, {
-        onProgress: (task) => {
-          setProgress(task.progress);
-          setStatusText(`Generating... ${task.progress}%`);
-          if (pipelineIdxRef.current >= 0) {
-            updatePipelineStep(pipelineIdxRef.current, {
-              status: task.status,
-              output: task.output,
-            });
-          }
-        },
-      });
-
-      setResultTask(result);
-      setProgress(100);
-      setStatusText('Complete');
-
-      if (pipelineIdxRef.current >= 0) {
-        updatePipelineStep(pipelineIdxRef.current, {
-          status: 'success',
-          output: result.output,
-        });
-      }
+      await pollGenerationTask(taskId, pipelineIdxRef.current);
     } catch (err: any) {
       setError(err.message || 'Generation failed');
       setStatusText('Failed');
@@ -246,7 +300,7 @@ export function GenerateTab() {
     }
   }, [
     apiKey, inputMode, prompt, negativePrompt, style, imageToken, mvTokens,
-    params, getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline,
+    params, getApi, addPipelineStep, updatePipelineStep, pipeline, pollGenerationTask,
   ]);
 
   // Download model to local disk then import to AE

@@ -4,6 +4,7 @@ const TERMINAL_STATUSES: TaskStatus[] = ['success', 'failed', 'cancelled', 'unkn
 
 export interface PollOptions {
   interval?: number;      // default 2000ms
+  maxInterval?: number;   // default 5000ms
   timeout?: number;       // default 300000ms (5 min)
   maxAttempts?: number;   // default 150
   onProgress?: (task: TripoTask) => void;
@@ -18,6 +19,7 @@ export class TaskPoller {
 
   async pollUntilDone(taskId: string, options?: PollOptions): Promise<TripoTask> {
     const defaultInterval = options?.interval ?? 2000;
+    const maxInterval = options?.maxInterval ?? 5000;
     const timeout = options?.timeout ?? 300000;
     const maxAttempts = options?.maxAttempts ?? 150;
     const onProgress = options?.onProgress;
@@ -52,6 +54,7 @@ export class TaskPoller {
       if (task.running_left_time != null && task.running_left_time > 0) {
         nextInterval = Math.max(2000, Math.floor(task.running_left_time * 500));
       }
+      nextInterval = Math.min(maxInterval, nextInterval);
 
       // Wait before next poll
       await this.delay(nextInterval);
