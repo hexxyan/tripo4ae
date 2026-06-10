@@ -3,6 +3,7 @@ import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
 import { TaskPoller } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
+import { useTranslation } from '../../hooks/useTranslation';
 import { STYLIZE_STYLES, CONVERT_FORMATS } from '../../../shared/constants';
 import type {
   StylizeStyle,
@@ -21,6 +22,7 @@ export function TransformTab() {
   const updatePipelineStep = useStore((s) => s.updatePipelineStep);
   const addModel = useStore((s) => s.addModel);
   const csInterface = useCsInterface();
+  const { t } = useTranslation();
 
   const importedTaskIds = useRef(new Set<string>());
 
@@ -74,16 +76,16 @@ export function TransformTab() {
     params: Record<string, unknown>,
   ) => {
     const taskId = getModelTaskId();
-    if (!taskId) { setError('Select a model'); return; }
+    if (!taskId) { setError(t('selectModelWarning')); return; }
 
     setError(null);
     setResult(null);
     setIsRunning(true);
     setProgress(0);
-    setStatusText('Starting...');
+    setStatusText(t('starting'));
 
     try {
-      if (!apiKey) throw new Error('API key not set');
+      if (!apiKey) throw new Error(t('failedToConnect'));
       const api = new TripoApiService(apiKey);
 
       const step: PipelineStep = {
@@ -102,7 +104,7 @@ export function TransformTab() {
       const res = await poller.pollUntilDone(newTaskId, {
         onProgress: (task) => {
           setProgress(task.progress);
-          setStatusText(`${type}... ${task.progress}%`);
+          setStatusText(`${t(type)}... ${task.progress}%`);
           if (taskIdxRef.current >= 0) {
             updatePipelineStep(taskIdxRef.current, {
               status: task.status,
@@ -119,18 +121,18 @@ export function TransformTab() {
       }
 
       // E2E: auto-download → import AE → persist Library
-      setStatusText('Importing to AE...');
-      await importTaskToAe(res, `${type} result`);
-      setStatusText('Complete');
+      setStatusText(t('statusImportingAE'));
+      await importTaskToAe(res, `${t(type)} result`);
+      setStatusText(t('statusSuccess'));
     } catch (err: any) {
-      setError(err.message || 'Task failed');
+      setError(err.message || t('statusFailed'));
       if (taskIdxRef.current >= 0) {
         updatePipelineStep(taskIdxRef.current, { status: 'failed' });
       }
     } finally {
       setIsRunning(false);
     }
-  }, [apiKey, pipeline, getModelTaskId, addPipelineStep, updatePipelineStep, importTaskToAe]);
+  }, [apiKey, pipeline, getModelTaskId, addPipelineStep, updatePipelineStep, importTaskToAe, t]);
 
   // Stylize
   const [stylizeStyle, setStylizeStyle] = useState<StylizeStyle>('lego');
@@ -138,14 +140,14 @@ export function TransformTab() {
 
   const handleStylize = useCallback(() => {
     const taskId = getModelTaskId();
-    if (!taskId) { setError('Select a model'); return; }
+    if (!taskId) { setError(t('selectModelWarning')); return; }
     runTask('stylize_model', {
       type: 'stylize_model',
       original_model_task_id: taskId,
       style: stylizeStyle,
       block_size: stylizeStyle === 'minecraft' ? blockSize : undefined,
     });
-  }, [stylizeStyle, blockSize, getModelTaskId, runTask]);
+  }, [stylizeStyle, blockSize, getModelTaskId, runTask, t]);
 
   // Mesh editing
   const [segResult, setSegResult] = useState<TripoTask | null>(null);
@@ -156,16 +158,16 @@ export function TransformTab() {
 
   const handleSegment = useCallback(async () => {
     const taskId = getModelTaskId();
-    if (!taskId) { setError('Select a model'); return; }
+    if (!taskId) { setError(t('selectModelWarning')); return; }
 
     setError(null);
     setSegResult(null);
     setIsRunning(true);
     setProgress(0);
-    setStatusText('Segmenting...');
+    setStatusText(t('statusSegmenting'));
 
     try {
-      if (!apiKey) throw new Error('API key not set');
+      if (!apiKey) throw new Error(t('failedToConnect'));
       const api = new TripoApiService(apiKey);
 
       const step: PipelineStep = {
@@ -187,7 +189,7 @@ export function TransformTab() {
       const res = await poller.pollUntilDone(newTaskId, {
         onProgress: (task) => {
           setProgress(task.progress);
-          setStatusText(`Segmenting... ${task.progress}%`);
+          setStatusText(`${t('statusSegmenting')} ${task.progress}%`);
           if (taskIdxRef.current >= 0) {
             updatePipelineStep(taskIdxRef.current, { status: task.status, output: task.output });
           }
@@ -196,28 +198,28 @@ export function TransformTab() {
 
       setSegResult(res);
       setProgress(100);
-      setStatusText('Segmentation complete');
+      setStatusText(t('statusSuccess'));
       if (taskIdxRef.current >= 0) {
         updatePipelineStep(taskIdxRef.current, { status: 'success', output: res.output });
       }
 
       // E2E: auto-download → import AE → persist Library
-      setStatusText('Importing to AE...');
+      setStatusText(t('statusImportingAE'));
       await importTaskToAe(res, 'Segmented Model');
-      setStatusText('Segmentation complete');
+      setStatusText(t('statusSuccess'));
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || t('statusFailed'));
       if (taskIdxRef.current >= 0) {
         updatePipelineStep(taskIdxRef.current, { status: 'failed' });
       }
     } finally {
       setIsRunning(false);
     }
-  }, [apiKey, pipeline, getModelTaskId, addPipelineStep, updatePipelineStep]);
+  }, [apiKey, pipeline, getModelTaskId, addPipelineStep, updatePipelineStep, importTaskToAe, t]);
 
   const handleComplete = useCallback(() => {
     const taskId = getModelTaskId();
-    if (!taskId) { setError('Select a model'); return; }
+    if (!taskId) { setError(t('selectModelWarning')); return; }
     runTask('mesh_completion', {
       type: 'mesh_completion',
       original_model_task_id: taskId,
@@ -225,11 +227,11 @@ export function TransformTab() {
         ? completePartNames.split(',').map((s) => s.trim()).filter(Boolean)
         : undefined,
     });
-  }, [completePartNames, getModelTaskId, runTask]);
+  }, [completePartNames, getModelTaskId, runTask, t]);
 
   const handleSimplify = useCallback(() => {
     const taskId = getModelTaskId();
-    if (!taskId) { setError('Select a model'); return; }
+    if (!taskId) { setError(t('selectModelWarning')); return; }
     if (simplifyHighpoly) {
       runTask('highpoly_to_lowpoly', {
         type: 'highpoly_to_lowpoly',
@@ -246,7 +248,7 @@ export function TransformTab() {
         face_limit: simplifyFaceLimit,
       });
     }
-  }, [simplifyQuad, simplifyFaceLimit, simplifyHighpoly, getModelTaskId, runTask]);
+  }, [simplifyQuad, simplifyFaceLimit, simplifyHighpoly, getModelTaskId, runTask, t]);
 
   // Convert
   const [convertFormat, setConvertFormat] = useState<ConvertFormat>('FBX');
@@ -258,7 +260,7 @@ export function TransformTab() {
 
   const handleConvert = useCallback(() => {
     const taskId = getModelTaskId();
-    if (!taskId) { setError('Select a model'); return; }
+    if (!taskId) { setError(t('selectModelWarning')); return; }
     runTask('convert_model', {
       type: 'convert_model',
       original_model_task_id: taskId,
@@ -270,19 +272,19 @@ export function TransformTab() {
       with_animation: convertWithAnim,
     });
   }, [convertFormat, convertQuad, convertFaceLimit, convertTexSize,
-    convertFbxPreset, convertWithAnim, getModelTaskId, runTask]);
+    convertFbxPreset, convertWithAnim, getModelTaskId, runTask, t]);
 
   return (
     <div style={styles.container}>
       {/* Model Selector */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Source Model</div>
+        <div style={styles.sectionTitle}>{t('sourceModelLabel')}</div>
         <label style={styles.fieldLabel}>
-          Pipeline Model
+          {t('sourceModelLabel')}
           <select value={modelStepIdx} onChange={(e) => setModelStepIdx(Number(e.target.value))} style={styles.select}>
-            <option value={-1}>-- Select --</option>
+            <option value={-1}>{t('selectModelOption')}</option>
             {modelSteps.map((step, i) => (
-              <option key={i} value={i}>{step.type} ({step.taskId?.slice(0, 8)})</option>
+              <option key={i} value={i}>{t(step.type)} ({step.taskId?.slice(0, 8)})</option>
             ))}
           </select>
         </label>
@@ -290,100 +292,100 @@ export function TransformTab() {
 
       {/* Stylize */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Stylize</div>
+        <div style={styles.sectionTitle}>{t('stylizeHeader')}</div>
         <label style={styles.fieldLabel}>
-          Style
+          {t('styleLabel')}
           <select value={stylizeStyle} onChange={(e) => setStylizeStyle(e.target.value as StylizeStyle)} style={styles.select}>
-            {STYLIZE_STYLES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            {STYLIZE_STYLES.map((s) => <option key={s.value} value={s.value}>{t(s.value)}</option>)}
           </select>
         </label>
         {stylizeStyle === 'minecraft' && (
           <label style={styles.fieldLabel}>
-            Block Size
+            {t('voxelSizeLabel')}
             <input type="number" value={blockSize} onChange={(e) => setBlockSize(Number(e.target.value))} style={styles.input} min={1} />
           </label>
         )}
         <button onClick={handleStylize} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-          Stylize
+          {isRunning && statusText.includes('stylize') ? t('stylize_model') : t('stylizeHeader')}
         </button>
       </div>
 
       {/* Mesh Editing */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Mesh Editing</div>
+        <div style={styles.sectionTitle}>{t('meshEditHeader')}</div>
         <button onClick={handleSegment} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-          Segment Mesh
+          {isRunning && statusText.includes('segment') ? t('mesh_segmentation') : t('segmentMeshBtn')}
         </button>
 
         <label style={styles.fieldLabel}>
-          Complete Part Names (optional, comma-separated)
+          {t('partNamesLabel')}
           <input
             type="text" value={completePartNames} onChange={(e) => setCompletePartNames(e.target.value)}
-            placeholder="body, head..." style={styles.input}
+            placeholder={t('partNamesPlaceholder')} style={styles.input}
           />
         </label>
         <button onClick={handleComplete} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-          Complete Mesh
+          {isRunning && statusText.includes('completion') ? t('mesh_completion') : t('completeMeshBtn')}
         </button>
 
         <div style={styles.subSection}>
-          <div style={styles.catLabel}>Simplify / High-to-Low Poly</div>
+          <div style={styles.catLabel}>{t('highpolyToLowpoly')}</div>
           <label style={styles.checkLabel}>
             <input type="checkbox" checked={simplifyQuad} onChange={(e) => setSimplifyQuad(e.target.checked)} />
-            Quad
+            {t('quadLabel')}
           </label>
           <label style={styles.fieldLabel}>
-            Face Limit
+            {t('faceLimitLabel')}
             <input type="number" value={simplifyFaceLimit} onChange={(e) => setSimplifyFaceLimit(Number(e.target.value))} style={styles.input} />
           </label>
           <label style={styles.checkLabel}>
             <input type="checkbox" checked={simplifyHighpoly} onChange={(e) => setSimplifyHighpoly(e.target.checked)} />
-            High-Poly to Low-Poly
+            {t('highpolyToLowpoly')}
           </label>
           <button onClick={handleSimplify} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-            Simplify
+            {isRunning && statusText.includes('highpoly_to_lowpoly') ? t('highpoly_to_lowpoly') : t('simplifyBtn')}
           </button>
         </div>
       </div>
 
       {/* Convert */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Convert Format</div>
+        <div style={styles.sectionTitle}>{t('convertHeader')}</div>
         <label style={styles.fieldLabel}>
-          Format
+          {t('formatLabel')}
           <select value={convertFormat} onChange={(e) => setConvertFormat(e.target.value as ConvertFormat)} style={styles.select}>
-            {CONVERT_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            {CONVERT_FORMATS.map((f) => <option key={f.value} value={f.value}>{t(f.value)}</option>)}
           </select>
         </label>
 
         <div style={styles.row}>
           <label style={styles.checkLabel}>
             <input type="checkbox" checked={convertQuad} onChange={(e) => setConvertQuad(e.target.checked)} />
-            Quad
+            {t('quadLabel')}
           </label>
           <label style={styles.checkLabel}>
             <input type="checkbox" checked={convertWithAnim} onChange={(e) => setConvertWithAnim(e.target.checked)} />
-            With Animation
+            {t('withAnimation')}
           </label>
         </div>
 
         <label style={styles.fieldLabel}>
-          Face Limit (optional)
+          {t('faceLimitLabel')}
           <input
             type="number" value={convertFaceLimit ?? ''}
             onChange={(e) => setConvertFaceLimit(e.target.value ? Number(e.target.value) : undefined)}
-            placeholder="Auto" style={styles.input}
+            placeholder={t('none')} style={styles.input}
           />
         </label>
 
         <label style={styles.fieldLabel}>
-          Texture Size
+          {t('textureSizeLabel')}
           <input type="number" value={convertTexSize} onChange={(e) => setConvertTexSize(Number(e.target.value))} style={styles.input} />
         </label>
 
         {convertFormat === 'FBX' && (
           <label style={styles.fieldLabel}>
-            FBX Preset
+            {t('fbxPresetLabel')}
             <select value={convertFbxPreset} onChange={(e) => setConvertFbxPreset(e.target.value as FbxPreset)} style={styles.select}>
               <option value="blender">Blender</option>
               <option value="3dsmax">3ds Max</option>
@@ -394,7 +396,7 @@ export function TransformTab() {
         )}
 
         <button onClick={handleConvert} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-          Convert
+          {isRunning && statusText.includes('convert') ? t('convert_model') : t('convertBtn')}
         </button>
       </div>
 
@@ -405,7 +407,7 @@ export function TransformTab() {
       {/* Result */}
       {result && (
         <div style={styles.resultBox}>
-          <span style={styles.resultLabel}>Task complete: {result.task_id.slice(0, 8)}</span>
+          <span style={styles.resultLabel}>{t('statusSuccess')}: {result.task_id.slice(0, 8)}</span>
           {result.output?.rendered_image && (
             <img src={result.output.rendered_image} style={styles.previewImg} alt="Result" />
           )}

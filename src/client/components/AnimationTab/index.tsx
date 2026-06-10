@@ -3,6 +3,7 @@ import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
 import { TaskPoller } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
+import { useTranslation } from '../../hooks/useTranslation';
 import {
   RIG_TYPES,
   BIPED_ANIMATIONS,
@@ -128,6 +129,7 @@ export function AnimationTab() {
   const updatePipelineStep = useStore((s) => s.updatePipelineStep);
   const addModel = useStore((s) => s.addModel);
   const csInterface = useCsInterface();
+  const { t } = useTranslation();
 
   const importedTaskIds = useRef(new Set<string>());
 
@@ -174,9 +176,9 @@ export function AnimationTab() {
   const [isRunning, setIsRunning] = useState(false);
 
   const getApi = useCallback(() => {
-    if (!apiKey) throw new Error('API key not set');
+    if (!apiKey) throw new Error(t('failedToConnect'));
     return new TripoApiService(apiKey);
-  }, [apiKey]);
+  }, [apiKey, t]);
 
   const runTask = useCallback(async (
     type: string,
@@ -186,7 +188,7 @@ export function AnimationTab() {
     setTaskResult(null);
     setIsRunning(true);
     setTaskProgress(0);
-    setTaskStatus('Starting...');
+    setTaskStatus(t('starting'));
 
     try {
       const api = getApi();
@@ -209,7 +211,7 @@ export function AnimationTab() {
       const result = await poller.pollUntilDone(taskId, {
         onProgress: (task) => {
           setTaskProgress(task.progress);
-          setTaskStatus(`${type}... ${task.progress}%`);
+          setTaskStatus(`${t(type)}... ${task.progress}%`);
           if (taskIdxRef.current >= 0) {
             updatePipelineStep(taskIdxRef.current, {
               status: task.status,
@@ -221,7 +223,7 @@ export function AnimationTab() {
 
       setTaskResult(result);
       setTaskProgress(100);
-      setTaskStatus('Complete');
+      setTaskStatus(t('statusSuccess'));
       if (taskIdxRef.current >= 0) {
         updatePipelineStep(taskIdxRef.current, {
           status: 'success',
@@ -230,7 +232,7 @@ export function AnimationTab() {
       }
       return result;
     } catch (err: any) {
-      setError(err.message || 'Task failed');
+      setError(err.message || t('statusFailed'));
       if (taskIdxRef.current >= 0) {
         updatePipelineStep(taskIdxRef.current, { status: 'failed' });
       }
@@ -238,17 +240,17 @@ export function AnimationTab() {
     } finally {
       setIsRunning(false);
     }
-  }, [apiKey, pipeline, getApi, addPipelineStep, updatePipelineStep]);
+  }, [apiKey, getApi, addPipelineStep, updatePipelineStep, t]);
 
   // Prerigcheck
   const handlePrerigcheck = useCallback(async () => {
     const taskId = modelSteps[modelStepIdx]?.taskId;
-    if (!taskId) { setError('Select a model'); return; }
+    if (!taskId) { setError(t('selectModelError')); return; }
     await runTask('animate_prerigcheck', {
       type: 'animate_prerigcheck',
       original_model_task_id: taskId,
     });
-  }, [modelStepIdx, modelSteps, runTask]);
+  }, [modelStepIdx, modelSteps, runTask, t]);
 
   // Rig
   const [rigType, setRigType] = useState<RigType>('biped');
@@ -257,7 +259,7 @@ export function AnimationTab() {
 
   const handleRig = useCallback(async () => {
     const taskId = modelSteps[modelStepIdx]?.taskId;
-    if (!taskId) { setError('Select a model'); return; }
+    if (!taskId) { setError(t('selectModelError')); return; }
     const result = await runTask('animate_rig', {
       type: 'animate_rig',
       original_model_task_id: taskId,
@@ -266,11 +268,11 @@ export function AnimationTab() {
       spec: rigSpec,
     });
     if (result) {
-      setTaskStatus('Importing rig to AE...');
+      setTaskStatus(t('statusImportingAE'));
       await importTaskToAe(result, `Rigged (${rigType})`);
-      setTaskStatus('Complete');
+      setTaskStatus(t('statusSuccess'));
     }
-  }, [modelStepIdx, modelSteps, rigType, rigOutFormat, rigSpec, runTask, importTaskToAe]);
+  }, [modelStepIdx, modelSteps, rigType, rigOutFormat, rigSpec, runTask, importTaskToAe, t]);
 
   // Retarget
   const [selectedAnims, setSelectedAnims] = useState<AnimationPreset[]>([]);
@@ -286,8 +288,8 @@ export function AnimationTab() {
 
   const handleRetarget = useCallback(async () => {
     const taskId = modelSteps[modelStepIdx]?.taskId;
-    if (!taskId) { setError('Select a model'); return; }
-    if (selectedAnims.length === 0) { setError('Select at least one animation'); return; }
+    if (!taskId) { setError(t('selectModelError')); return; }
+    if (selectedAnims.length === 0) { setError(t('selectAnimError')); return; }
     const result = await runTask('animate_retarget', {
       type: 'animate_retarget',
       original_model_task_id: taskId,
@@ -296,11 +298,11 @@ export function AnimationTab() {
       animate_in_place: animateInPlace,
     });
     if (result) {
-      setTaskStatus('Importing animated model to AE...');
+      setTaskStatus(t('statusImportingAE'));
       await importTaskToAe(result, `Animated (${selectedAnims.length} anims)`);
-      setTaskStatus('Complete');
+      setTaskStatus(t('statusSuccess'));
     }
-  }, [modelStepIdx, modelSteps, selectedAnims, animateInPlace, runTask, importTaskToAe]);
+  }, [modelStepIdx, modelSteps, selectedAnims, animateInPlace, runTask, importTaskToAe, t]);
 
   // AE Animation
   const [camPreset, setCamPreset] = useState<CameraPreset>('orbit');
@@ -481,13 +483,13 @@ export function AnimationTab() {
     <div style={styles.container}>
       {/* Model Selector */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Source Model</div>
+        <div style={styles.sectionTitle}>{t('sourceModelLabel')}</div>
         <label style={styles.fieldLabel}>
-          Pipeline Model
+          {t('sourceModelLabel')}
           <select value={modelStepIdx} onChange={(e) => setModelStepIdx(Number(e.target.value))} style={styles.select}>
-            <option value={-1}>-- Select --</option>
+            <option value={-1}>{t('selectModelOption')}</option>
             {modelSteps.map((step, i) => (
-              <option key={i} value={i}>{step.type} ({step.taskId?.slice(0, 8)})</option>
+              <option key={i} value={i}>{t(step.type)} ({step.taskId?.slice(0, 8)})</option>
             ))}
           </select>
         </label>
@@ -495,18 +497,18 @@ export function AnimationTab() {
 
       {/* Prerigcheck */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Pre-Rig Check</div>
+        <div style={styles.sectionTitle}>{t('checkRigLabel')}</div>
         <button onClick={handlePrerigcheck} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-          Check Rig-ability
+          {isRunning && taskStatus.includes('prerigcheck') ? t('statusCheckingRig') : t('checkRigLabel')}
         </button>
         {taskResult && taskResult.type === 'animate_prerigcheck' && (
           <div style={styles.resultBox}>
             <span style={{ color: taskResult.output?.riggable ? '#4aff6b' : '#ff6b6b', fontSize: 10 }}>
-              Riggable: {taskResult.output?.riggable ? 'Yes' : 'No'}
+              {taskResult.output?.riggable ? t('riggableTrue') : t('riggableFalse')}
             </span>
             {taskResult.output?.rig_type && (
               <span style={{ color: '#aaa', fontSize: 10 }}>
-                Detected: {taskResult.output.rig_type} / {taskResult.output?.topology}
+                {t('detectedRigType')}: {t(taskResult.output.rig_type)} / {taskResult.output?.topology}
               </span>
             )}
           </div>
@@ -515,23 +517,23 @@ export function AnimationTab() {
 
       {/* Rig */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Rig Model</div>
+        <div style={styles.sectionTitle}>{t('rigModelLabel')}</div>
         <div style={styles.row}>
           <label style={styles.fieldLabel}>
-            Rig Type
+            {t('rigTypeLabel')}
             <select value={rigType} onChange={(e) => setRigType(e.target.value as RigType)} style={styles.select}>
-              {RIG_TYPES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              {RIG_TYPES.map((r) => <option key={r.value} value={r.value}>{t(r.value)}</option>)}
             </select>
           </label>
           <label style={styles.fieldLabel}>
-            Format
+            {t('formatLabel')}
             <select value={rigOutFormat} onChange={(e) => setRigOutFormat(e.target.value as RigOutFormat)} style={styles.select}>
               <option value="glb">GLB</option>
               <option value="fbx">FBX</option>
             </select>
           </label>
           <label style={styles.fieldLabel}>
-            Spec
+            {t('rigSpecLabel')}
             <select value={rigSpec} onChange={(e) => setRigSpec(e.target.value as RigSpec)} style={styles.select}>
               <option value="tripo">Tripo</option>
               <option value="mixamo">Mixamo</option>
@@ -539,28 +541,28 @@ export function AnimationTab() {
           </label>
         </div>
         <button onClick={handleRig} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-          Rig Model
+          {isRunning && taskStatus.includes('rig') ? t('statusRigging') : t('rigModelLabel')}
         </button>
       </div>
 
       {/* Retarget */}
       <div style={styles.sectionBox}>
         <div style={styles.sectionTitle}>
-          Retarget Animation ({selectedAnims.length}/5 selected)
+          {t('retargetLabel')} ({selectedAnims.length}/5)
         </div>
         {ANIM_CATEGORIES.map((cat) => (
           <div key={cat.label}>
-            <div style={styles.catLabel}>{cat.label}</div>
+            <div style={styles.catLabel}>{t(cat.label)}</div>
             <div style={styles.animGrid}>
               {cat.items.map((anim) => {
-                const selected = selectedAnims.includes(anim.value);
+                const selected = selectedAnims.includes(anim.value as AnimationPreset);
                 return (
                   <button
                     key={anim.value}
-                    onClick={() => toggleAnim(anim.value)}
+                    onClick={() => toggleAnim(anim.value as AnimationPreset)}
                     style={selected ? styles.animBtnActive : styles.animBtn}
                   >
-                    {anim.label}
+                    {t(anim.value, anim.label)}
                   </button>
                 );
               })}
@@ -569,10 +571,10 @@ export function AnimationTab() {
         ))}
         <label style={styles.checkLabel}>
           <input type="checkbox" checked={animateInPlace} onChange={(e) => setAnimateInPlace(e.target.checked)} />
-          Animate in Place
+          {t('animateInPlace')}
         </label>
         <button onClick={handleRetarget} disabled={isRunning || modelStepIdx < 0 || selectedAnims.length === 0} style={styles.actionBtn}>
-          Retarget
+          {isRunning && taskStatus.includes('retarget') ? t('statusRetargeting') : t('retargetLabel')}
         </button>
       </div>
 
@@ -582,18 +584,18 @@ export function AnimationTab() {
 
       {/* Scene Setup */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Scene Setup</div>
-        <p style={styles.hint}>Creates camera + 3-point lighting + environment light in the active comp.</p>
+        <div style={styles.sectionTitle}>{t('sceneSetupTitle')}</div>
+        <p style={styles.hint}>{t('sceneSetupHint')}</p>
         <button onClick={handleSetupScene} style={styles.actionBtn}>
-          Setup Scene
+          {t('sceneSetupBtn')}
         </button>
         {sceneError && <div style={styles.error}>{sceneError}</div>}
       </div>
 
       {/* Material Presets */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Material Presets</div>
-        <p style={styles.hint}>Select a 3D layer in AE, then apply a PBR material preset.</p>
+        <div style={styles.sectionTitle}>{t('advancedPbrHeader')}</div>
+        <p style={styles.hint}>{t('materialPresetHint')}</p>
         <div style={styles.presetRow}>
           {MATERIAL_PRESETS.filter((p) => p.value !== 'default').map((p) => (
             <button
@@ -601,16 +603,16 @@ export function AnimationTab() {
               onClick={() => setMatPreset(p.value as MaterialPresetName)}
               style={matPreset === p.value ? styles.presetBtnActive : styles.presetBtn}
             >
-              {p.label}
+              {t(p.value)}
             </button>
           ))}
         </div>
         <div style={styles.row}>
           <button onClick={handleApplyMaterial} style={styles.actionBtn}>
-            Apply
+            {t('applyBtn')}
           </button>
           <button onClick={handleReadMaterial} style={styles.secondaryBtn}>
-            Read Current
+            {t('readCurrentBtn')}
           </button>
         </div>
         {sceneError && <div style={styles.error}>{sceneError}</div>}
@@ -622,17 +624,17 @@ export function AnimationTab() {
           onClick={() => setPbrEditorExpanded(!pbrEditorExpanded)}
           style={{ ...styles.sectionTitle, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
         >
-          <span>Advanced PBR Material Options</span>
+          <span>{t('advancedPbrHeader')}</span>
           <span>{pbrEditorExpanded ? '▼' : '▶'}</span>
         </div>
         {pbrEditorExpanded ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
             <button onClick={handleReadMaterialAndSetSliders} style={styles.secondaryBtn}>
-              Read from Selected Layer
+              {t('readFromLayerBtn')}
             </button>
 
             <label style={styles.fieldLabel}>
-              Ambient: {pbrAmbient}%
+              {t('ambient')}: {pbrAmbient}%
               <input
                 type="range" min={0} max={100} step={1}
                 value={pbrAmbient} onChange={(e) => setPbrAmbient(Number(e.target.value))}
@@ -641,7 +643,7 @@ export function AnimationTab() {
             </label>
 
             <label style={styles.fieldLabel}>
-              Diffuse: {pbrDiffuse}%
+              {t('diffuse')}: {pbrDiffuse}%
               <input
                 type="range" min={0} max={100} step={1}
                 value={pbrDiffuse} onChange={(e) => setPbrDiffuse(Number(e.target.value))}
@@ -650,7 +652,7 @@ export function AnimationTab() {
             </label>
 
             <label style={styles.fieldLabel}>
-              Specular Intensity: {pbrSpecularIntensity}%
+              {t('specularIntensity')}: {pbrSpecularIntensity}%
               <input
                 type="range" min={0} max={100} step={1}
                 value={pbrSpecularIntensity} onChange={(e) => setPbrSpecularIntensity(Number(e.target.value))}
@@ -659,7 +661,7 @@ export function AnimationTab() {
             </label>
 
             <label style={styles.fieldLabel}>
-              Specular Shininess (Glossiness): {pbrSpecularShininess}%
+              {t('specularShininess')}: {pbrSpecularShininess}%
               <input
                 type="range" min={0} max={100} step={1}
                 value={pbrSpecularShininess} onChange={(e) => setPbrSpecularShininess(Number(e.target.value))}
@@ -668,7 +670,7 @@ export function AnimationTab() {
             </label>
 
             <label style={styles.fieldLabel}>
-              Metalness: {pbrMetal}%
+              {t('metalness')}: {pbrMetal}%
               <input
                 type="range" min={0} max={100} step={1}
                 value={pbrMetal} onChange={(e) => setPbrMetal(Number(e.target.value))}
@@ -677,7 +679,7 @@ export function AnimationTab() {
             </label>
 
             <label style={styles.fieldLabel}>
-              Light Transmission: {pbrLightTransmission}%
+              {t('lightTransmission')}: {pbrLightTransmission}%
               <input
                 type="range" min={0} max={100} step={1}
                 value={pbrLightTransmission} onChange={(e) => setPbrLightTransmission(Number(e.target.value))}
@@ -686,7 +688,7 @@ export function AnimationTab() {
             </label>
 
             <label style={styles.fieldLabel}>
-              Reflection Intensity: {pbrReflectionIntensity}%
+              {t('reflectionIntensity')}: {pbrReflectionIntensity}%
               <input
                 type="range" min={0} max={100} step={1}
                 value={pbrReflectionIntensity} onChange={(e) => setPbrReflectionIntensity(Number(e.target.value))}
@@ -695,7 +697,7 @@ export function AnimationTab() {
             </label>
 
             <label style={styles.fieldLabel}>
-              Reflection Sharpness (Roughness): {pbrReflectionSharpness}%
+              {t('reflectionSharpness')}: {pbrReflectionSharpness}%
               <input
                 type="range" min={0} max={100} step={1}
                 value={pbrReflectionSharpness} onChange={(e) => setPbrReflectionSharpness(Number(e.target.value))}
@@ -704,7 +706,7 @@ export function AnimationTab() {
             </label>
 
             <label style={styles.fieldLabel}>
-              Transparency: {pbrTransparency}%
+              {t('transparency')}: {pbrTransparency}%
               <input
                 type="range" min={0} max={100} step={1}
                 value={pbrTransparency} onChange={(e) => setPbrTransparency(Number(e.target.value))}
@@ -713,7 +715,7 @@ export function AnimationTab() {
             </label>
 
             <label style={styles.fieldLabel}>
-              Index of Refraction (IOR): {pbrIndexOrRefraction.toFixed(2)}
+              {t('ior')}: {pbrIndexOrRefraction.toFixed(2)}
               <input
                 type="range" min={1.0} max={3.0} step={0.05}
                 value={pbrIndexOrRefraction} onChange={(e) => setPbrIndexOrRefraction(Number(e.target.value))}
@@ -722,20 +724,20 @@ export function AnimationTab() {
             </label>
 
             <button onClick={handleApplyPBRProperties} style={styles.actionBtn}>
-              Apply PBR Properties
+              {t('applyPbrBtn')}
             </button>
           </div>
         ) : (
-          <p style={styles.hint}>Expand to micro-tune Ambient, Metal, Transmission, IOR, etc.</p>
+          <p style={styles.hint}>{t('advancedPbrHint')}</p>
         )}
       </div>
 
       {/* AE Animation */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>AE Animation (Local)</div>
+        <div style={styles.sectionTitle}>{t('aeAnimationLocal')}</div>
 
         {/* Camera Presets */}
-        <div style={styles.fieldLabel}>Camera</div>
+        <div style={styles.fieldLabel}>{t('cameraLabel')}</div>
         <div style={styles.presetRow}>
           {CAMERA_PRESETS.map((p) => (
             <button
@@ -743,13 +745,13 @@ export function AnimationTab() {
               onClick={() => setCamPreset(p.value)}
               style={camPreset === p.value ? styles.presetBtnActive : styles.presetBtn}
             >
-              {p.label}
+              {t(p.value)}
             </button>
           ))}
         </div>
 
         {/* Model Presets */}
-        <div style={styles.fieldLabel}>Model</div>
+        <div style={styles.fieldLabel}>{t('modelLabel')}</div>
         <div style={styles.presetRow}>
           {MODEL_PRESETS.map((p) => (
             <button
@@ -757,22 +759,22 @@ export function AnimationTab() {
               onClick={() => setModelPreset(p.value)}
               style={modelPreset === p.value ? styles.presetBtnActive : styles.presetBtn}
             >
-              {p.label}
+              {t(p.value)}
             </button>
           ))}
         </div>
 
         {/* Easing */}
         <label style={styles.fieldLabel}>
-          Easing
+          {t('easingLabel')}
           <select value={easing} onChange={(e) => setEasing(e.target.value as EasingType)} style={styles.select}>
-            {EASING_TYPES.map((et) => <option key={et.value} value={et.value}>{et.label}</option>)}
+            {EASING_TYPES.map((et) => <option key={et.value} value={et.value}>{t(et.value)}</option>)}
           </select>
         </label>
 
         {/* Duration */}
         <label style={styles.fieldLabel}>
-          Duration: {duration.toFixed(1)}s
+          {t('durationLabel')}: {duration.toFixed(1)}s
           <input
             type="range" min={0.5} max={10} step={0.1}
             value={duration} onChange={(e) => setDuration(Number(e.target.value))}
@@ -784,7 +786,7 @@ export function AnimationTab() {
         <div style={styles.loopSection}>
           <label style={styles.checkLabel}>
             <input type="checkbox" checked={spinEnabled} onChange={(e) => setSpinEnabled(e.target.checked)} />
-            Spin
+            {t('spinLabel')}
           </label>
           {spinEnabled && (
             <div style={styles.loopControls}>
@@ -797,7 +799,7 @@ export function AnimationTab() {
 
           <label style={styles.checkLabel}>
             <input type="checkbox" checked={floatEnabled} onChange={(e) => setFloatEnabled(e.target.checked)} />
-            Float
+            {t('floatLabel')}
           </label>
           {floatEnabled && (
             <div style={styles.loopControls}>
@@ -808,7 +810,7 @@ export function AnimationTab() {
 
           <label style={styles.checkLabel}>
             <input type="checkbox" checked={breatheEnabled} onChange={(e) => setBreatheEnabled(e.target.checked)} />
-            Breathe
+            {t('breatheLabel')}
           </label>
           {breatheEnabled && (
             <div style={styles.loopControls}>
@@ -819,18 +821,18 @@ export function AnimationTab() {
         </div>
 
         <button onClick={handleApplyAEAnim} style={styles.actionBtn}>
-          Apply Animation
+          {t('applyAnimBtn')}
         </button>
 
         {/* Templates */}
         <div style={styles.templateSection}>
-          <div style={styles.catLabel}>Templates</div>
+          <div style={styles.catLabel}>{t('templatesTitle')}</div>
           <div style={styles.templateRow}>
             <input
               type="text" value={templateName} onChange={(e) => setTemplateName(e.target.value)}
-              placeholder="Template name..." style={styles.input}
+              placeholder={t('templateNamePlaceholder')} style={styles.input}
             />
-            <button onClick={saveTemplate} style={styles.smallBtn}>Save</button>
+            <button onClick={saveTemplate} style={styles.smallBtn}>{t('saveBtn')}</button>
           </div>
           {templates.map((tmpl) => (
             <button key={tmpl.id} onClick={() => loadTemplate(tmpl)} style={styles.templateItem}>

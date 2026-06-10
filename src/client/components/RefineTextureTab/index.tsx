@@ -3,6 +3,7 @@ import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
 import { TaskPoller } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
+import { useTranslation } from '../../hooks/useTranslation';
 import type {
   RefineModelRequest,
   TextureModelRequest,
@@ -24,6 +25,7 @@ export function RefineTextureTab() {
   const updatePipelineStep = useStore((s) => s.updatePipelineStep);
   const addModel = useStore((s) => s.addModel);
   const csInterface = useCsInterface();
+  const { t } = useTranslation();
 
   const importedTaskIds = useRef(new Set<string>());
 
@@ -86,9 +88,9 @@ export function RefineTextureTab() {
   const texIdxRef = useRef<number>(-1);
 
   const getApi = useCallback(() => {
-    if (!apiKey) throw new Error('API key not set');
+    if (!apiKey) throw new Error(t('failedToConnect'));
     return new TripoApiService(apiKey);
-  }, [apiKey]);
+  }, [apiKey, t]);
 
   const getPoller = useCallback(() => {
     const api = getApi();
@@ -111,7 +113,7 @@ export function RefineTextureTab() {
   const handleRefine = useCallback(async () => {
     const taskId = getModelTaskId(selectedStepIdx);
     if (!taskId) {
-      setRefineError('Select a model from pipeline history');
+      setRefineError(t('selectModelWarning'));
       return;
     }
 
@@ -119,7 +121,7 @@ export function RefineTextureTab() {
     setRefineResult(null);
     setIsRefining(true);
     setRefineProgress(0);
-    setRefineStatus('Starting refine...');
+    setRefineStatus(t('starting'));
 
     try {
       const api = getApi();
@@ -147,7 +149,7 @@ export function RefineTextureTab() {
       const result = await poller.pollUntilDone(newTaskId, {
         onProgress: (task) => {
           setRefineProgress(task.progress);
-          setRefineStatus(`Refining... ${task.progress}%`);
+          setRefineStatus(`${t('refiningStatus')} ${task.progress}%`);
           if (refineIdxRef.current >= 0) {
             updatePipelineStep(refineIdxRef.current, {
               status: task.status,
@@ -159,7 +161,7 @@ export function RefineTextureTab() {
 
       setRefineResult(result);
       setRefineProgress(100);
-      setRefineStatus('Refine complete');
+      setRefineStatus(t('statusSuccess'));
       if (refineIdxRef.current >= 0) {
         updatePipelineStep(refineIdxRef.current, {
           status: 'success',
@@ -168,24 +170,24 @@ export function RefineTextureTab() {
       }
 
       // E2E: auto-download → import AE → persist Library
-      setRefineStatus('Importing to AE...');
+      setRefineStatus(t('statusImportingAE'));
       await importTaskToAe(result, 'Refined Model');
-      setRefineStatus('Refine complete');
+      setRefineStatus(t('statusSuccess'));
     } catch (err: any) {
-      setRefineError(err.message || 'Refine failed');
+      setRefineError(err.message || t('statusFailed'));
       if (refineIdxRef.current >= 0) {
         updatePipelineStep(refineIdxRef.current, { status: 'failed' });
       }
     } finally {
       setIsRefining(false);
     }
-  }, [selectedStepIdx, modelSteps, getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline, importTaskToAe]);
+  }, [selectedStepIdx, modelSteps, getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline, importTaskToAe, t]);
 
   // --- Texture ---
   const handleTexture = useCallback(async () => {
     const taskId = getModelTaskId(texModelStepIdx);
     if (!taskId) {
-      setTexError('Select a model from pipeline history');
+      setTexError(t('selectModelWarning'));
       return;
     }
 
@@ -193,7 +195,7 @@ export function RefineTextureTab() {
     setTexResult(null);
     setIsTexturing(true);
     setTexProgress(0);
-    setTexStatus('Starting texture...');
+    setTexStatus(t('starting'));
 
     try {
       const api = getApi();
@@ -237,7 +239,7 @@ export function RefineTextureTab() {
       const result = await poller.pollUntilDone(newTaskId, {
         onProgress: (task) => {
           setTexProgress(task.progress);
-          setTexStatus(`Texturing... ${task.progress}%`);
+          setTexStatus(`${t('texturingStatus')} ${task.progress}%`);
           if (texIdxRef.current >= 0) {
             updatePipelineStep(texIdxRef.current, {
               status: task.status,
@@ -249,7 +251,7 @@ export function RefineTextureTab() {
 
       setTexResult(result);
       setTexProgress(100);
-      setTexStatus('Texture complete');
+      setTexStatus(t('statusSuccess'));
       if (texIdxRef.current >= 0) {
         updatePipelineStep(texIdxRef.current, {
           status: 'success',
@@ -258,11 +260,11 @@ export function RefineTextureTab() {
       }
 
       // E2E: auto-download → import AE → persist Library
-      setTexStatus('Importing to AE...');
+      setTexStatus(t('statusImportingAE'));
       await importTaskToAe(result, 'Textured Model');
-      setTexStatus('Texture complete');
+      setTexStatus(t('statusSuccess'));
     } catch (err: any) {
-      setTexError(err.message || 'Texture failed');
+      setTexError(err.message || t('statusFailed'));
       if (texIdxRef.current >= 0) {
         updatePipelineStep(texIdxRef.current, { status: 'failed' });
       }
@@ -271,7 +273,7 @@ export function RefineTextureTab() {
     }
   }, [texModelStepIdx, texInputMode, texPrompt, texImageToken, texStyleToken,
     texQuality, texPbr, texAlignment, texBake, texPartNames,
-    getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline, importTaskToAe]);
+    getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline, importTaskToAe, t]);
 
   const renderModelSelector = (
     label: string,
@@ -285,10 +287,10 @@ export function RefineTextureTab() {
         onChange={(e) => onChange(Number(e.target.value))}
         style={styles.select}
       >
-        <option value={-1}>-- Select model --</option>
+        <option value={-1}>{t('selectModelOption')}</option>
         {modelSteps.map((step, i) => (
           <option key={i} value={i}>
-            {step.type} ({step.taskId?.slice(0, 8)})
+            {t(step.type)} ({step.taskId?.slice(0, 8)})
           </option>
         ))}
       </select>
@@ -299,20 +301,20 @@ export function RefineTextureTab() {
     <div style={styles.container}>
       {/* Refine Section */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Refine Model</div>
-        {renderModelSelector('Source Model', selectedStepIdx, setSelectedStepIdx)}
+        <div style={styles.sectionTitle}>{t('refineBtn')}</div>
+        {renderModelSelector(t('sourceModelLabel'), selectedStepIdx, setSelectedStepIdx)}
         <button
           onClick={handleRefine}
           disabled={isRefining || !apiKey || selectedStepIdx < 0}
           style={styles.actionBtn}
         >
-          {isRefining ? 'Refining...' : 'Refine'}
+          {isRefining ? t('refiningStatus') : t('refineBtn')}
         </button>
         {refineError && <div style={styles.error}>{refineError}</div>}
         {isRefining && <ProgressBar progress={refineProgress} status={refineStatus} />}
         {refineResult && (
           <div style={styles.resultBox}>
-            <span style={styles.resultLabel}>Refined model ready</span>
+            <span style={styles.resultLabel}>{t('refinedReady')}</span>
             {refineResult.output?.rendered_image && (
               <img src={refineResult.output.rendered_image} style={styles.previewImg} alt="Refined" />
             )}
@@ -322,8 +324,8 @@ export function RefineTextureTab() {
 
       {/* Texture Section */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>Apply Texture</div>
-        {renderModelSelector('Source Model', texModelStepIdx, setTexModelStepIdx)}
+        <div style={styles.sectionTitle}>{t('applyTextureBtn')}</div>
+        {renderModelSelector(t('sourceModelLabel'), texModelStepIdx, setTexModelStepIdx)}
 
         {/* Texture Input Mode */}
         <div style={styles.toggleRow}>
@@ -333,7 +335,7 @@ export function RefineTextureTab() {
               onClick={() => setTexInputMode(mode)}
               style={texInputMode === mode ? styles.toggleBtnActive : styles.toggleBtn}
             >
-              {mode === 'text' ? 'Text' : mode === 'image' ? 'Image' : 'Style'}
+              {mode === 'text' ? t('text') : mode === 'image' ? t('image') : t('style')}
             </button>
           ))}
         </div>
@@ -342,7 +344,7 @@ export function RefineTextureTab() {
           <textarea
             value={texPrompt}
             onChange={(e) => setTexPrompt(e.target.value)}
-            placeholder="Texture prompt..."
+            placeholder={t('texturePromptPlaceholder')}
             style={styles.textarea}
             rows={2}
           />
@@ -372,40 +374,40 @@ export function RefineTextureTab() {
 
         {/* Texture Options */}
         <label style={styles.fieldLabel}>
-          Texture Quality
+          {t('textureQuality')}
           <select value={texQuality} onChange={(e) => setTexQuality(e.target.value as TextureQuality)} style={styles.select}>
-            <option value="standard">Standard</option>
-            <option value="detailed">Detailed</option>
-            <option value="extreme">Extreme</option>
+            <option value="standard">{t('standard')}</option>
+            <option value="detailed">{t('detailed')}</option>
+            <option value="extreme">{t('extreme')}</option>
           </select>
         </label>
 
         <div style={styles.toggleRow}>
           <label style={styles.checkLabel}>
             <input type="checkbox" checked={texPbr} onChange={(e) => setTexPbr(e.target.checked)} />
-            PBR
+            {t('pbrLabel')}
           </label>
           <label style={styles.checkLabel}>
             <input type="checkbox" checked={texBake} onChange={(e) => setTexBake(e.target.checked)} />
-            Bake
+            {t('bakeLabel')}
           </label>
         </div>
 
         <label style={styles.fieldLabel}>
-          Texture Alignment
+          {t('alignmentLabel')}
           <select value={texAlignment} onChange={(e) => setTexAlignment(e.target.value as TextureAlignment)} style={styles.select}>
-            <option value="geometry">Geometry</option>
-            <option value="original_image">Original Image</option>
+            <option value="geometry">{t('geometry')}</option>
+            <option value="original_image">{t('originalImage')}</option>
           </select>
         </label>
 
         <label style={styles.fieldLabel}>
-          Part Names (comma-separated)
+          {t('partNamesLabel')}
           <input
             type="text"
             value={texPartNames}
             onChange={(e) => setTexPartNames(e.target.value)}
-            placeholder="body, head, arms..."
+            placeholder={t('partNamesPlaceholder')}
             style={styles.input}
           />
         </label>
@@ -415,13 +417,13 @@ export function RefineTextureTab() {
           disabled={isTexturing || !apiKey || texModelStepIdx < 0}
           style={styles.actionBtn}
         >
-          {isTexturing ? 'Applying...' : 'Apply Texture'}
+          {isTexturing ? t('texturingStatus') : t('applyTextureBtn')}
         </button>
         {texError && <div style={styles.error}>{texError}</div>}
         {isTexturing && <ProgressBar progress={texProgress} status={texStatus} />}
         {texResult && (
           <div style={styles.resultBox}>
-            <span style={styles.resultLabel}>Textured model ready</span>
+            <span style={styles.resultLabel}>{t('texturedReady')}</span>
             {texResult.output?.rendered_image && (
               <img src={texResult.output.rendered_image} style={styles.previewImg} alt="Textured" />
             )}

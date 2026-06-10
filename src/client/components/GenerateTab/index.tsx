@@ -4,6 +4,7 @@ import { TripoApiService } from '../../services/tripoApi';
 import { TaskPoller } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
 import { GENERATE_STYLES, IMPORT_WORKFLOWS } from '../../../shared/constants';
+import { useTranslation } from '../../hooks/useTranslation';
 import type {
   ConvertModelRequest,
   TextToModelRequest,
@@ -55,6 +56,7 @@ export function GenerateTab() {
   const upsertModel = useStore((s) => s.upsertModel);
   const pipeline = useStore((s) => s.pipeline);
   const csInterface = useCsInterface();
+  const { t } = useTranslation();
 
   // Input mode
   const [inputMode, setInputMode] = useState<InputMode>('text');
@@ -100,9 +102,9 @@ export function GenerateTab() {
   const recoveringTaskRef = useRef<string | null>(null);
 
   const getApi = useCallback(() => {
-    if (!apiKey) throw new Error('API key not set');
+    if (!apiKey) throw new Error(t('failedToConnect'));
     return new TripoApiService(apiKey);
-  }, [apiKey]);
+  }, [apiKey, t]);
 
   const getPoller = useCallback(() => {
     const api = getApi();
@@ -142,7 +144,7 @@ export function GenerateTab() {
         };
         const convertStepIndex = nextStepIdx.current++;
         addPipelineStep(convertStep);
-        setStatusText('Converting for Element 3D...');
+        setStatusText(t('statusConverting'));
         const convertTaskId = await api.createTask(convertReq);
         updatePipelineStep(convertStepIndex, {
           taskId: convertTaskId,
@@ -155,7 +157,7 @@ export function GenerateTab() {
           maxInterval: 5000,
           timeout: 15 * 60 * 1000,
           onProgress: (progressTask) => {
-            setStatusText(`Converting for Element 3D... ${progressTask.progress}%`);
+            setStatusText(`${t('statusConverting')} ${progressTask.progress}%`);
             updatePipelineStep(convertStepIndex, {
               status: progressTask.status,
               output: progressTask.output,
@@ -177,15 +179,15 @@ export function GenerateTab() {
       let localPath = existingModel?.modelPath;
 
       if (!localPath || forceDownload) {
-        setStatusText(workflow === 'element3d' ? 'Downloading OBJ...' : 'Downloading model...');
+        setStatusText(workflow === 'element3d' ? `${t('statusDownloading')} (OBJ)...` : t('statusDownloading'));
         localPath = await api.downloadTaskResult(taskToDownload, TripoApiService.getModelSaveDir());
       }
 
       if (workflow === 'element3d') {
-        setStatusText('Creating Element 3D layer...');
+        setStatusText(t('statusCreatingE3D'));
         await csInterface.setupE3D(localPath);
       } else {
-        setStatusText(workflow === 'project_only' ? 'Importing into Project panel...' : 'Importing into AE...');
+        setStatusText(workflow === 'project_only' ? t('statusImportingProject') : t('statusImportingAE'));
         await csInterface.importModel(localPath, {
           addToComp: workflow !== 'project_only',
           centerInComp: workflow === 'advanced3d',
@@ -208,15 +210,16 @@ export function GenerateTab() {
       upsertModel(model);
       setStatusText(
         workflow === 'project_only'
-          ? 'Imported to Project panel'
+          ? t('importedToProject')
           : workflow === 'element3d'
-            ? 'Element 3D layer ready'
-            : 'Imported to AE'
+            ? t('element3dReady')
+            : t('importedToAe')
       );
-    } finally {
+    } // wait, handle catch block? No, try block is closed here, wait, finally is next. Let's make sure try-finally matches original
+    finally {
       setIsImporting(false);
     }
-  }, [addPipelineStep, csInterface, getApi, getPoller, getTaskPrompt, models, upsertModel, updatePipelineStep]);
+  }, [addPipelineStep, csInterface, getApi, getPoller, getTaskPrompt, models, upsertModel, updatePipelineStep, t]);
 
   const pollGenerationTask = useCallback(async (
     taskId: string,
@@ -228,7 +231,7 @@ export function GenerateTab() {
     setError(null);
     setResultTask(null);
     setIsGenerating(true);
-    setStatusText(resume ? 'Resuming generation...' : 'Generating...');
+    setStatusText(resume ? t('generating') : t('generating'));
 
     try {
       const poller = getPoller();
@@ -238,7 +241,7 @@ export function GenerateTab() {
         timeout: 15 * 60 * 1000,
         onProgress: (task) => {
           setProgress(task.progress);
-          setStatusText(`Generating... ${task.progress}%`);
+          setStatusText(`${t('generating')} ${task.progress}%`);
           updatePipelineStep(pipelineIndex, {
             status: task.status,
             output: task.output,
@@ -249,7 +252,7 @@ export function GenerateTab() {
 
       setResultTask(result);
       setProgress(100);
-      setStatusText('Complete');
+      setStatusText(t('statusSuccess'));
       updatePipelineStep(pipelineIndex, {
         status: 'success',
         output: result.output,
@@ -263,13 +266,13 @@ export function GenerateTab() {
         try {
           await importTaskWithWorkflow(result, workflow, pipelineIndex);
         } catch (importErr: any) {
-          setError(`Generated, but import failed: ${importErr.message || 'Unknown error'}`);
-          setStatusText('Import failed');
+          setError(`${t('statusSuccess')}, but import failed: ${importErr.message || 'Unknown error'}`);
+          setStatusText(t('statusFailed'));
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Generation failed');
-      setStatusText('Failed');
+      setError(err.message || t('statusFailed'));
+      setStatusText(t('statusFailed'));
       updatePipelineStep(pipelineIndex, { status: 'failed' });
     } finally {
       setIsGenerating(false);
@@ -277,7 +280,7 @@ export function GenerateTab() {
         resumedTaskRef.current = null;
       }
     }
-  }, [getPoller, importTaskWithWorkflow, importWorkflow, updatePipelineStep]);
+  }, [getPoller, importTaskWithWorkflow, importWorkflow, updatePipelineStep, t]);
 
   useEffect(() => {
     if (!apiKey || isGenerating || isImporting) return;
@@ -335,24 +338,24 @@ export function GenerateTab() {
 
     recoveringTaskRef.current = taskId;
     setCurrentTaskId(taskId);
-    setStatusText('Recovering generated model...');
+    setStatusText(t('importing'));
     void (async () => {
       try {
         const task = await getApi().getTask(taskId);
         setResultTask(task);
         await importTaskWithWorkflow(task, step.workflow || importWorkflow, index);
       } catch (recoverErr: any) {
-        setError(`Recovery failed: ${recoverErr.message || 'Unknown error'}`);
-        setStatusText('Recovery failed');
+        setError(`${t('recoveryFailed')}: ${recoverErr.message || 'Unknown error'}`);
+        setStatusText(t('statusFailed'));
       } finally {
         recoveringTaskRef.current = null;
       }
     })();
-  }, [apiKey, getApi, importTaskWithWorkflow, importWorkflow, isGenerating, isImporting, models, pipeline]);
+  }, [apiKey, getApi, importTaskWithWorkflow, importWorkflow, isGenerating, isImporting, models, pipeline, t]);
 
   const handleGenerate = useCallback(async () => {
     if (!apiKey) {
-      setError('Please set your API key first');
+      setError(t('failedToConnect'));
       return;
     }
 
@@ -360,7 +363,7 @@ export function GenerateTab() {
     setResultTask(null);
     setIsGenerating(true);
     setProgress(0);
-    setStatusText('Starting...');
+    setStatusText(t('starting'));
     pipelineIdxRef.current = -1;
 
     try {
@@ -383,7 +386,7 @@ export function GenerateTab() {
 
       if (inputMode === 'text') {
         if (!prompt.trim()) {
-          setError('Prompt is required');
+          setError(t('promptRequired'));
           setIsGenerating(false);
           return;
         }
@@ -412,7 +415,7 @@ export function GenerateTab() {
         });
       } else if (inputMode === 'image') {
         if (!imageToken) {
-          setError('Please upload an image');
+          setError(t('uploadImageRequired'));
           setIsGenerating(false);
           return;
         }
@@ -442,7 +445,7 @@ export function GenerateTab() {
         // multiview
         const fileTokens = mvTokens.filter((t) => t !== null) as string[];
         if (fileTokens.length < 1) {
-          setError('Please upload at least one view image');
+          setError(t('uploadMvRequired'));
           setIsGenerating(false);
           return;
         }
@@ -472,8 +475,8 @@ export function GenerateTab() {
 
       await pollGenerationTask(taskId, pipelineIdxRef.current);
     } catch (err: any) {
-      setError(err.message || 'Generation failed');
-      setStatusText('Failed');
+      setError(err.message || t('statusFailed'));
+      setStatusText(t('statusFailed'));
       if (pipelineIdxRef.current >= 0) {
         updatePipelineStep(pipelineIdxRef.current, { status: 'failed' });
       }
@@ -482,7 +485,7 @@ export function GenerateTab() {
     }
   }, [
     apiKey, inputMode, prompt, negativePrompt, style, imageToken, mvTokens,
-    importWorkflow, params, getApi, addPipelineStep, updatePipelineStep, pipeline, pollGenerationTask,
+    importWorkflow, params, getApi, addPipelineStep, updatePipelineStep, pollGenerationTask, t,
   ]);
 
   // Download model to local disk then import to AE
@@ -545,7 +548,7 @@ export function GenerateTab() {
     }
   }, [apiKey, mvFiles, mvTokens]);
 
-  const mvLabels = ['Front', 'Left', 'Back', 'Right'];
+  const mvLabels = [t('front'), t('left'), t('back'), t('right')];
 
   return (
     <div style={styles.container}>
@@ -557,7 +560,7 @@ export function GenerateTab() {
             onClick={() => setInputMode(mode)}
             style={inputMode === mode ? styles.modeBtnActive : styles.modeBtn}
           >
-            {mode === 'text' ? 'Text' : mode === 'image' ? 'Image' : 'Multiview'}
+            {mode === 'text' ? t('modeText') : mode === 'image' ? t('modeImage') : t('modeMultiview')}
           </button>
         ))}
       </div>
@@ -573,15 +576,15 @@ export function GenerateTab() {
           />
           {!isP1(params.modelVersion) && (
             <label style={styles.fieldLabel}>
-              Style
+              {t('styleLabel')}
               <select
                 value={style}
                 onChange={(e) => setStyle(e.target.value as GenerateStyle | '')}
                 style={styles.select}
               >
-                <option value="">None</option>
+                <option value="">{t('none')}</option>
                 {GENERATE_STYLES.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
+                  <option key={s.value} value={s.value}>{t(s.value) || s.label}</option>
                 ))}
               </select>
             </label>
@@ -618,7 +621,7 @@ export function GenerateTab() {
               style={styles.secondaryBtn}
               disabled
             >
-              Generate Views
+              {t('generateViews')}
             </button>
             <button
               onClick={() => {
@@ -627,7 +630,7 @@ export function GenerateTab() {
               style={styles.secondaryBtn}
               disabled
             >
-              Edit Views
+              {t('editViews')}
             </button>
           </div>
         </div>
@@ -637,7 +640,7 @@ export function GenerateTab() {
       <ParameterPanel params={params} onChange={(p) => setParams((prev) => ({ ...prev, ...p }))} />
 
       <label style={styles.fieldLabel}>
-        Import Workflow
+        {t('importWorkflowLabel')}
         <select
           value={importWorkflow}
           onChange={(e) => setImportWorkflow(e.target.value as ImportWorkflow)}
@@ -645,7 +648,7 @@ export function GenerateTab() {
         >
           {IMPORT_WORKFLOWS.map((workflow) => (
             <option key={workflow.value} value={workflow.value}>
-              {workflow.label} — {workflow.description}
+              {t(workflow.value)} — {t(workflow.value + 'Desc', workflow.description)}
             </option>
           ))}
         </select>
@@ -658,14 +661,14 @@ export function GenerateTab() {
       {(isGenerating || isImporting) && (
         <div style={styles.section}>
           <ProgressBar progress={progress} status={statusText} />
-          {currentTaskId && <div style={styles.taskMeta}>Task: {currentTaskId}</div>}
+          {currentTaskId && <div style={styles.taskMeta}>{t('task')}: {currentTaskId}</div>}
         </div>
       )}
 
       {/* Result Preview */}
       {resultTask && (
         <div style={styles.section}>
-          <div style={styles.previewHeader}>Result</div>
+          <div style={styles.previewHeader}>{t('resultHeader')}</div>
           {resultTask.output?.rendered_image && (
             <img
               src={resultTask.output.rendered_image}
@@ -674,35 +677,35 @@ export function GenerateTab() {
             />
           )}
           <div style={styles.modelInfo}>
-            <span>Task: {resultTask.task_id.slice(0, 8)}...</span>
-            <span>Current: {IMPORT_WORKFLOWS.find((workflow) => workflow.value === importWorkflow)?.label}</span>
+            <span>{t('task')}: {resultTask.task_id.slice(0, 8)}...</span>
+            <span>{t('current')}: {t(importWorkflow)}</span>
           </div>
           <div style={styles.importActions}>
-            <span style={{ fontSize: 9, color: '#aaa', margin: '2px 0' }}>Re-run import using workflow:</span>
+            <span style={{ fontSize: 9, color: '#aaa', margin: '2px 0' }}>{t('reImportTitle')}</span>
             <div style={styles.importSubRow}>
               <button
                 onClick={() => handleImportWithSpecificWorkflow('advanced3d')}
                 disabled={isImporting}
                 style={importWorkflow === 'advanced3d' ? styles.activeImportSubBtn : styles.importSubBtn}
-                title="Import as native 3D layer"
+                title={t('advanced3dDesc')}
               >
-                AE Native
+                {t('aeNative')}
               </button>
               <button
                 onClick={() => handleImportWithSpecificWorkflow('project_only')}
                 disabled={isImporting}
                 style={importWorkflow === 'project_only' ? styles.activeImportSubBtn : styles.importSubBtn}
-                title="Import to Project panel only"
+                title={t('project_onlyDesc')}
               >
-                Project Only
+                {t('projectOnly')}
               </button>
               <button
                 onClick={() => handleImportWithSpecificWorkflow('element3d')}
                 disabled={isImporting}
                 style={importWorkflow === 'element3d' ? styles.activeImportSubBtn : styles.importSubBtn}
-                title="Convert to OBJ and setup Element 3D layer (Semi-automatic)"
+                title={t('element3dDesc')}
               >
-                Element 3D
+                {t('element3d')}
               </button>
             </div>
           </div>
@@ -720,7 +723,7 @@ export function GenerateTab() {
               : styles.generateBtn
           }
         >
-          {isGenerating ? 'Generating...' : 'Generate'}
+          {isGenerating ? t('generating') : t('generateBtn')}
         </button>
       </div>
     </div>

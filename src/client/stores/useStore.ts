@@ -9,6 +9,7 @@ interface TripoState {
   models: ModelRecord[];
   activeComp: CompInfo | null;
   templates: AnimTemplate[];
+  language: 'en' | 'zh';
 
   setApiKey: (key: string | null) => void;
   setBalance: (balance: number) => void;
@@ -20,6 +21,7 @@ interface TripoState {
   removeModel: (id: string) => void;
   setCompInfo: (info: CompInfo | null) => void;
   addTemplate: (template: AnimTemplate) => void;
+  setLanguage: (lang: 'en' | 'zh') => void;
   reset: () => void;
 }
 
@@ -30,6 +32,7 @@ const initialState = {
   models: [] as ModelRecord[],
   activeComp: null as CompInfo | null,
   templates: [] as AnimTemplate[],
+  language: 'en' as 'en' | 'zh',
 };
 
 const STORE_KEY = 'tripo4ae-store';
@@ -42,6 +45,8 @@ export const useStore = create<TripoState>()(
       setApiKey: (key) => set({ apiKey: key }),
 
       setBalance: (balance) => set({ balance }),
+
+      setLanguage: (lang) => set({ language: lang }),
 
       addPipelineStep: (step) =>
         set((state) => ({ pipeline: [...state.pipeline, step] })),
@@ -98,6 +103,7 @@ export const useStore = create<TripoState>()(
         pipeline: state.pipeline,
         models: state.models,
         templates: state.templates,
+        language: state.language,
       }),
     },
   ),

@@ -3,6 +3,7 @@ import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
 import { TaskPoller } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
+import { useTranslation } from '../../hooks/useTranslation';
 import { IMPORT_WORKFLOWS } from '../../../shared/constants';
 import type { ModelRecord, AnimTemplate } from '../../../shared/types';
 
@@ -13,6 +14,7 @@ export function LibraryTab() {
   const apiKey = useStore((s) => s.apiKey);
   const templates = useStore((s) => s.templates);
   const csInterface = useCsInterface();
+  const { t } = useTranslation();
 
   const [error, setError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export function LibraryTab() {
 
   const handleReimport = useCallback(async (model: ModelRecord) => {
     if (!model.modelPath) {
-      setError('No model path available for this entry');
+      setError(t('noModelPathWarning'));
       return;
     }
     setImportingId(model.id);
@@ -39,11 +41,11 @@ export function LibraryTab() {
         });
       }
     } catch (err: any) {
-      setError(err.message || 'Import failed');
+      setError(err.message || t('statusFailed'));
     } finally {
       setImportingId(null);
     }
-  }, [csInterface]);
+  }, [csInterface, t]);
 
   const handleDelete = useCallback((id: string) => {
     removeModel(id);
@@ -57,7 +59,7 @@ export function LibraryTab() {
     setError(null);
 
     try {
-      if (!apiKey) throw new Error('API key not set');
+      if (!apiKey) throw new Error(t('failedToConnect'));
       const api = new TripoApiService(apiKey);
       const token = await api.uploadImage(file);
 
@@ -73,7 +75,7 @@ export function LibraryTab() {
       });
 
       const modelUrl = api.getModelUrl(task.output);
-      if (!modelUrl) throw new Error('No model URL in import result');
+      if (!modelUrl) throw new Error(t('noModelUrlError'));
 
       // Download to local, import to AE, persist to Library
       const saveDir = TripoApiService.getModelSaveDir();
@@ -93,11 +95,11 @@ export function LibraryTab() {
       };
       addModel(newModel);
     } catch (err: any) {
-      setError(err.message || 'External import failed');
+      setError(err.message || t('externalImportFailed'));
     } finally {
       setIsImporting(false);
     }
-  }, [apiKey, csInterface, addModel]);
+  }, [apiKey, csInterface, addModel, t]);
 
   const loadTemplate = useCallback((tmpl: AnimTemplate) => {
     // Templates are loaded from the Animation tab; just show a confirmation
@@ -105,9 +107,9 @@ export function LibraryTab() {
     try {
       csInterface.applyAnimation(tmpl.config);
     } catch (err: any) {
-      setError(err.message || 'Apply template failed');
+      setError(err.message || t('statusFailed'));
     }
-  }, [csInterface]);
+  }, [csInterface, t]);
 
   const formatDate = (ts: number) => {
     const d = new Date(ts);
@@ -128,7 +130,7 @@ export function LibraryTab() {
             <div
               key={i}
               style={{ ...styles.dot, backgroundColor: color }}
-              title={`${step.type}: ${step.status}`}
+              title={`${t(step.type)}: ${t(step.status as any)}`}
             />
           );
         })}
@@ -140,13 +142,13 @@ export function LibraryTab() {
     <div style={styles.container}>
       {/* Header */}
       <div style={styles.header}>
-        <span style={styles.headerTitle}>Model Library ({models.length})</span>
+        <span style={styles.headerTitle}>{t('libraryHeader')} ({models.length})</span>
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={isImporting || !apiKey}
           style={styles.importBtn}
         >
-          {isImporting ? 'Importing...' : 'Import External'}
+          {isImporting ? t('importing') : t('importExternalBtn')}
         </button>
         <input
           ref={fileInputRef}
@@ -163,7 +165,7 @@ export function LibraryTab() {
       {models.length === 0 ? (
         <div style={styles.emptyState}>
           <span style={styles.emptyIcon}>-</span>
-          <span style={styles.emptyText}>No models yet. Generate your first model!</span>
+          <span style={styles.emptyText}>{t('noModels')}</span>
         </div>
       ) : (
         <div style={styles.list}>
@@ -183,7 +185,7 @@ export function LibraryTab() {
                 <div style={styles.modelName}>{model.name}</div>
                 <div style={styles.modelMeta}>
                   <span>{model.format}</span>
-                  <span>{IMPORT_WORKFLOWS.find((workflow) => workflow.value === model.workflow)?.label || 'AE Native'}</span>
+                  <span>{t(model.workflow || '')}</span>
                   <span>{formatDate(model.createdAt)}</span>
                 </div>
                 {renderPipelineDots(model.pipelineSteps)}
@@ -195,14 +197,14 @@ export function LibraryTab() {
                   onClick={() => handleReimport(model)}
                   disabled={importingId === model.id}
                   style={styles.reimportBtn}
-                  title="Re-import to composition"
+                  title={t('importBtn')}
                 >
-                  {importingId === model.id ? '...' : 'Import'}
+                  {importingId === model.id ? '...' : t('importBtn')}
                 </button>
                 <button
                   onClick={() => handleDelete(model.id)}
                   style={styles.deleteBtn}
-                  title="Remove from library"
+                  title={t('deleteBtn')}
                 >
                   X
                 </button>
@@ -214,15 +216,15 @@ export function LibraryTab() {
 
       {/* Animation Templates */}
       <div style={styles.templateSection}>
-        <div style={styles.sectionTitle}>Animation Templates</div>
+        <div style={styles.sectionTitle}>{t('templatesSection')}</div>
         {templates.length === 0 ? (
-          <span style={styles.emptyText}>No templates saved yet. Create one in the Animate tab.</span>
+          <span style={styles.emptyText}>{t('noTemplates')}</span>
         ) : (
           templates.map((tmpl) => (
             <div key={tmpl.id} style={styles.templateCard} onClick={() => loadTemplate(tmpl)}>
               <span style={styles.templateName}>{tmpl.name}</span>
               <span style={styles.templateMeta}>
-                {tmpl.config.modelPreset} / {tmpl.config.duration}s / {tmpl.config.easing}
+                {t(tmpl.config.modelPreset || '')} / {tmpl.config.duration}s / {t(tmpl.config.easing || '')}
               </span>
             </div>
           ))

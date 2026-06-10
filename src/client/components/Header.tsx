@@ -1,12 +1,15 @@
 import React, { useState, useCallback } from 'react';
 import { useStore } from '../stores/useStore';
 import { TripoApiService } from '../services/tripoApi';
+import { useTranslation } from '../hooks/useTranslation';
 
 export function Header() {
   const apiKey = useStore((s) => s.apiKey);
   const balance = useStore((s) => s.balance);
   const setApiKey = useStore((s) => s.setApiKey);
   const setBalance = useStore((s) => s.setBalance);
+
+  const { t, language, setLanguage } = useTranslation();
 
   const [keyInput, setKeyInput] = useState(apiKey ?? '');
   const [connecting, setConnecting] = useState(false);
@@ -27,13 +30,13 @@ export function Header() {
       setApiKey(trimmed);
       setBalance(result.balance);
     } catch (e: any) {
-      setError(e.message || 'Failed to connect');
+      setError(e.message || t('failedToConnect'));
       setApiKey(null);
       setBalance(0);
     } finally {
       setConnecting(false);
     }
-  }, [keyInput, setApiKey, setBalance]);
+  }, [keyInput, setApiKey, setBalance, t]);
 
   const handleDisconnect = useCallback(() => {
     setApiKey(null);
@@ -53,16 +56,33 @@ export function Header() {
             }}
           />
           <span style={styles.title}>Tripo4AE</span>
+          {isConnected && (
+            <span style={styles.balance}>
+              ({balance} {t('credits')})
+            </span>
+          )}
         </div>
-        {isConnected && (
-          <span style={styles.balance}>{balance} credits</span>
-        )}
+        <div style={styles.langSwitchRow}>
+          <button
+            onClick={() => setLanguage('en')}
+            style={language === 'en' ? styles.langBtnActive : styles.langBtn}
+          >
+            EN
+          </button>
+          <span style={styles.langDivider}>/</span>
+          <button
+            onClick={() => setLanguage('zh')}
+            style={language === 'zh' ? styles.langBtnActive : styles.langBtn}
+          >
+            中
+          </button>
+        </div>
       </div>
 
       <div style={styles.inputRow}>
         <input
           type="password"
-          placeholder="API Key"
+          placeholder={t('apiKeyPlaceholder')}
           value={keyInput}
           onChange={(e) => setKeyInput(e.target.value)}
           onKeyDown={(e) => {
@@ -81,7 +101,7 @@ export function Header() {
             style={styles.connectBtn}
             disabled={connecting || !keyInput.trim()}
           >
-            {connecting ? '...' : 'Connect'}
+            {connecting ? '...' : t('connect')}
           </button>
         )}
       </div>
@@ -123,6 +143,34 @@ const styles: Record<string, React.CSSProperties> = {
   balance: {
     fontSize: 10,
     color: '#888',
+  },
+  langSwitchRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    fontSize: 10,
+  },
+  langBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#666',
+    cursor: 'pointer',
+    padding: '2px 4px',
+    fontSize: 10,
+    transition: 'color 0.15s',
+  },
+  langBtnActive: {
+    background: 'none',
+    border: 'none',
+    color: '#4a9eff',
+    cursor: 'pointer',
+    padding: '2px 4px',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  langDivider: {
+    color: '#444',
+    fontSize: 9,
   },
   inputRow: {
     display: 'flex',

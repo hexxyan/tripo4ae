@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { PipelineStepper } from './components/PipelineStepper';
 import { GenerateTab } from './components/GenerateTab';
@@ -7,6 +7,7 @@ import { AnimationTab } from './components/AnimationTab';
 import { TransformTab } from './components/TransformTab';
 import { LibraryTab } from './components/LibraryTab';
 import { useStore } from './stores/useStore';
+import { useTranslation } from './hooks/useTranslation';
 
 export type TabId = 'generate' | 'refine' | 'animate' | 'transform' | 'library';
 
@@ -15,17 +16,51 @@ interface TabDef {
   label: string;
 }
 
-const TABS: TabDef[] = [
-  { id: 'generate', label: 'Generate' },
-  { id: 'refine', label: 'Refine' },
-  { id: 'animate', label: 'Animate' },
-  { id: 'transform', label: 'Transform' },
-  { id: 'library', label: 'Library' },
-];
+declare const CSInterface: any;
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabId>('generate');
   const pipeline = useStore((s) => s.pipeline);
+  const { t, setLanguage } = useTranslation();
+
+  useEffect(() => {
+    const stored = localStorage.getItem('tripo4ae-store');
+    let hasStoredLanguage = false;
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.state && typeof parsed.state.language === 'string') {
+          hasStoredLanguage = true;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (!hasStoredLanguage) {
+      if (typeof CSInterface !== 'undefined') {
+        try {
+          const csInterface = new CSInterface();
+          const hostLang = csInterface.getHostEnvironment()?.appLanguage;
+          if (hostLang && hostLang.toLowerCase().indexOf('zh') !== -1) {
+            setLanguage('zh');
+          } else {
+            setLanguage('en');
+          }
+        } catch (e) {
+          console.error('Failed to auto-detect language from host environment', e);
+        }
+      }
+    }
+  }, [setLanguage]);
+
+  const tabs: TabDef[] = [
+    { id: 'generate', label: t('tabGenerate') },
+    { id: 'refine', label: t('tabRefine') },
+    { id: 'animate', label: t('tabAnimate') },
+    { id: 'transform', label: t('tabTransform') },
+    { id: 'library', label: t('tabLibrary') },
+  ];
 
   const handleStepClick = (index: number) => {
     const step = pipeline[index];
@@ -83,12 +118,12 @@ export function App() {
       <Header />
       <PipelineStepper pipeline={pipeline} onStepClick={handleStepClick} />
       <div style={styles.tabBar}>
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={activeTab === tab.id ? styles.tabActive : styles.tab}
-          >
+             key={tab.id}
+             onClick={() => setActiveTab(tab.id)}
+             style={activeTab === tab.id ? styles.tabActive : styles.tab}
+           >
             {tab.label}
           </button>
         ))}
