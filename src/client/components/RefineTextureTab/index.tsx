@@ -306,7 +306,7 @@ export function RefineTextureTab() {
             onFileSelected={async (file) => {
               try {
                 const api = getApi();
-                const token = await api.uploadImage(file.name);
+                const token = await api.uploadImage(file);
                 setTexImageToken(token);
               } catch (err: any) { setTexError(err.message); }
             }}
@@ -317,7 +317,7 @@ export function RefineTextureTab() {
             onFileSelected={async (file) => {
               try {
                 const api = getApi();
-                const token = await api.uploadImage(file.name);
+                const token = await api.uploadImage(file);
                 setTexStyleToken(token);
               } catch (err: any) { setTexError(err.message); }
             }}

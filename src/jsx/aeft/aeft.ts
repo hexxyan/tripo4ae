@@ -642,5 +642,5 @@ export function getExpression(type: string, paramsJson?: string): string {
   if (paramsJson) {
     try { params = JSON.parse(paramsJson); } catch (e) {}
   }
-  return getExpression(type, params);
+  return buildExpression(type, params);
 }

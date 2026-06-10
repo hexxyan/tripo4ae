@@ -62,7 +62,7 @@ export function LibraryTab() {
     try {
       if (!apiKey) throw new Error('API key not set');
       const api = new TripoApiService(apiKey);
-      const token = await api.uploadImage(file.name);
+      const token = await api.uploadImage(file);
 
       const taskId = await api.createTask({
         type: 'import_model',
@@ -71,14 +71,18 @@ export function LibraryTab() {
 
       // Wait briefly then try to import
       const task = await api.getTask(taskId);
-      if (task.output?.model) {
-        await csInterface.importModel(task.output.model);
+      const modelUrl = api.getModelUrl(task.output);
+      if (modelUrl) {
+        // Download to local first, then import
+        const saveDir = TripoApiService.getModelSaveDir();
+        const localPath = await api.downloadTaskResult(task, saveDir);
+        await csInterface.importModel(localPath);
         const newModel: ModelRecord = {
           id: taskId,
           taskId,
           name: file.name.replace(/\.[^.]+$/, ''),
           format: 'GLB',
-          modelPath: task.output.model,
+          modelPath: localPath,
           thumbnailUrl: task.output.rendered_image,
           createdAt: Date.now(),
           pipelineSteps: [],

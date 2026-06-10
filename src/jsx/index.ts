@@ -52,5 +52,7 @@ switch (getAppNameSafely()) {
   case "aftereffects":
   case "aftereffectsbeta":
     host[ns] = aeft;
+    // Register as global `tripo4ae` for direct evalScript access
+    host["tripo4ae"] = aeft;
     break;
 }

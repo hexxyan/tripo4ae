@@ -23,6 +23,23 @@ import { ImageUpload } from '../common/ImageUpload';
 
 type InputMode = 'text' | 'image' | 'multiview';
 
+// P1 version doesn't support quad, geometry_quality, texture_quality, style
+const P1_VERSION = 'P1-20260311';
+
+function isP1(version: ModelVersion): boolean {
+  return version === P1_VERSION;
+}
+
+// Strip unsupported params for P1
+function filterParamsForVersion(
+  params: Record<string, any>,
+  version: ModelVersion,
+): Record<string, any> {
+  if (!isP1(version)) return params;
+  const { quad, geometry_quality, texture_quality, style, ...rest } = params;
+  return rest;
+}
+
 export function GenerateTab() {
   const apiKey = useStore((s) => s.apiKey);
   const addPipelineStep = useStore((s) => s.addPipelineStep);
@@ -95,6 +112,20 @@ export function GenerateTab() {
       const api = getApi();
       let taskId: string;
 
+      // Base params — filter per version
+      const baseParams = filterParamsForVersion({
+        model_version: params.modelVersion,
+        face_limit: params.faceLimit,
+        pbr: params.pbr,
+        quad: params.quad,
+        texture_quality: params.textureQuality,
+        geometry_quality: params.geometryQuality,
+        model_seed: params.modelSeed,
+        texture_seed: params.textureSeed,
+        style: style || undefined,
+        render_image: true,
+      }, params.modelVersion);
+
       if (inputMode === 'text') {
         if (!prompt.trim()) {
           setError('Prompt is required');
@@ -105,16 +136,7 @@ export function GenerateTab() {
           type: 'text_to_model',
           prompt: prompt.trim(),
           negative_prompt: negativePrompt.trim() || undefined,
-          model_version: params.modelVersion,
-          face_limit: params.faceLimit,
-          pbr: params.pbr,
-          quad: params.quad,
-          texture_quality: params.textureQuality,
-          geometry_quality: params.geometryQuality,
-          model_seed: params.modelSeed,
-          texture_seed: params.textureSeed,
-          style: style || undefined,
-          render_image: true,
+          ...baseParams,
         };
 
         const step: PipelineStep = {
@@ -140,15 +162,7 @@ export function GenerateTab() {
         const req: ImageToModelRequest = {
           type: 'image_to_model',
           file: { type: 'image_token', file_token: imageToken },
-          model_version: params.modelVersion,
-          face_limit: params.faceLimit,
-          pbr: params.pbr,
-          quad: params.quad,
-          texture_quality: params.textureQuality,
-          geometry_quality: params.geometryQuality,
-          model_seed: params.modelSeed,
-          texture_seed: params.textureSeed,
-          render_image: true,
+          ...baseParams,
         };
 
         const step: PipelineStep = {
@@ -176,12 +190,7 @@ export function GenerateTab() {
         const req: MultiviewToModelRequest = {
           type: 'multiview_to_model',
           files: fileTokens.map((t) => ({ type: 'image_token', file_token: t })),
-          model_version: params.modelVersion,
-          face_limit: params.faceLimit,
-          pbr: params.pbr,
-          quad: params.quad,
-          texture_quality: params.textureQuality,
-          geometry_quality: params.geometryQuality,
+          ...baseParams,
         };
 
         const step: PipelineStep = {
@@ -240,32 +249,49 @@ export function GenerateTab() {
     params, getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline,
   ]);
 
+  // Download model to local disk then import to AE
   const handleImport = useCallback(async () => {
-    if (!resultTask?.output?.model) return;
+    if (!resultTask) return;
     try {
-      await csInterface.importModel(resultTask.output.model);
+      const api = getApi();
+      const modelUrl = api.getModelUrl(resultTask.output);
+      if (!modelUrl) {
+        setError('No model URL in task result');
+        return;
+      }
+
+      setStatusText('Downloading model...');
+      const saveDir = TripoApiService.getModelSaveDir();
+      const localPath = await api.downloadTaskResult(resultTask, saveDir);
+
+      setStatusText('Importing to AE...');
+      await csInterface.importModel(localPath);
+
       const model: ModelRecord = {
         id: resultTask.task_id,
         taskId: resultTask.task_id,
         name: prompt || 'Generated Model',
         prompt: prompt,
         thumbnailUrl: resultTask.output.rendered_image,
-        modelPath: resultTask.output.model,
+        modelPath: localPath,
         format: 'GLB',
         createdAt: Date.now(),
         pipelineSteps: [...pipeline],
       };
       addModel(model);
+      setStatusText('Complete');
     } catch (err: any) {
       setError(err.message || 'Import failed');
+      setStatusText('');
     }
-  }, [resultTask, prompt, csInterface, addModel, pipeline]);
+  }, [resultTask, prompt, getApi, csInterface, addModel, pipeline]);
 
+  // Upload File object via arrayBuffer — not file.name
   const handleImageUpload = useCallback(async (file: File) => {
     setImageFile(file);
     try {
       const api = getApi();
-      const token = await api.uploadImage(file.name);
+      const token = await api.uploadImage(file);
       setImageToken(token);
     } catch (err: any) {
       setError(err.message || 'Image upload failed');
@@ -277,10 +303,9 @@ export function GenerateTab() {
     newFiles[index] = file;
     setMvFiles(newFiles);
 
-    // Upload and get token
     if (apiKey) {
       const api = new TripoApiService(apiKey);
-      api.uploadImage(file.name).then((token) => {
+      api.uploadImage(file).then((token) => {
         const newTokens = [...mvTokens];
         newTokens[index] = token;
         setMvTokens(newTokens);
@@ -316,19 +341,21 @@ export function GenerateTab() {
             negativeValue={negativePrompt}
             onNegativeChange={setNegativePrompt}
           />
-          <label style={styles.fieldLabel}>
-            Style
-            <select
-              value={style}
-              onChange={(e) => setStyle(e.target.value as GenerateStyle | '')}
-              style={styles.select}
-            >
-              <option value="">None</option>
-              {GENERATE_STYLES.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
-          </label>
+          {!isP1(params.modelVersion) && (
+            <label style={styles.fieldLabel}>
+              Style
+              <select
+                value={style}
+                onChange={(e) => setStyle(e.target.value as GenerateStyle | '')}
+                style={styles.select}
+              >
+                <option value="">None</option>
+                {GENERATE_STYLES.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       )}
 
@@ -356,7 +383,6 @@ export function GenerateTab() {
           <div style={styles.buttonRow}>
             <button
               onClick={() => {
-                // generate_multiview_image flow — for future implementation
                 setError('Multiview image generation requires a source image');
               }}
               style={styles.secondaryBtn}
