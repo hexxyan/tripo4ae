@@ -15,6 +15,36 @@ export class TripoApiService {
     this.client = new TripoHttpClient(apiKey);
   }
 
+  /**
+   * Returns the best available model URL from task output.
+   * Priority: pbr_model > model > base_model (matches official plugin patterns).
+   */
+  getModelUrl(output: { pbr_model?: string; model?: string; base_model?: string }): string | null {
+    if (output.pbr_model) return output.pbr_model;
+    if (output.model) return output.model;
+    if (output.base_model) return output.base_model;
+    return null;
+  }
+
+  /**
+   * Convenience method: downloads the best available model from a completed task.
+   * Returns the local file path.
+   */
+  async downloadTaskResult(task: TripoTask, saveDir: string): Promise<string> {
+    const url = this.getModelUrl(task.output);
+    if (!url) {
+      throw new Error(`No model URL found in task ${task.task_id} output`);
+    }
+
+    // Determine extension from URL (default to .glb)
+    const urlPath = new URL(url).pathname;
+    const ext = path.extname(urlPath) || '.glb';
+    const fileName = `${task.task_id}${ext}`;
+    const savePath = path.join(saveDir, fileName);
+
+    return this.downloadModel(url, savePath);
+  }
+
   async createTask(request: TripoTaskRequest): Promise<string> {
     const response = await this.client.post<TripoApiResponse<{ task_id: string }>>(
       '/task',
