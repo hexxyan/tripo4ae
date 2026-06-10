@@ -973,6 +973,9 @@ export function AnimationTab() {
         </div>
         {pbrEditorExpanded ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+            <div style={{ fontSize: '11px', color: '#999', marginBottom: '4px', padding: '6px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '4px', lineHeight: '1.4' }}>
+              <strong>{t('note')}:</strong> GLB models use their embedded materials and are lit primarily by the Environment Light.
+            </div>
             <button onClick={handleReadMaterialAndSetSliders} style={styles.secondaryBtn}>
               {t('readFromLayerBtn')}
             </button>

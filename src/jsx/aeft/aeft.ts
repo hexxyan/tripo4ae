@@ -902,6 +902,14 @@ export function createEnvironmentLight(configJson?: string): string {
           lightOptions.property("ADBE Light Type").setValue(isEnv ? 5 : 4);
         }
       }
+      
+      // If Environment Light, make background visible so user can see the HDR
+      if (isEnv) {
+        var envLightGroup = lightLayer.property("ADBE Light Options Group");
+        if (envLightGroup) {
+          try { envLightGroup.property("ADBE Light Backgd Visible").setValue(1); } catch (e) {}
+        }
+      }
     } catch (e) {
       try {
         var lightOptions = lightLayer.property("ADBE Light Options Group");
@@ -1128,6 +1136,14 @@ export function setupScene(configJson?: string): string {
               lightOpts.property("ADBE Light Type").setValue(isEnv ? 5 : 4);
             }
           }
+          
+          // If Environment Light, make background visible so user can see the HDR
+          if (isEnv) {
+            var envLightGroup = envLayer.property("ADBE Light Options Group");
+            if (envLightGroup) {
+              try { envLightGroup.property("ADBE Light Backgd Visible").setValue(1); } catch (e) {}
+            }
+          }
         } catch (e) {
           try {
             var lightOpts = envLayer.property("ADBE Light Options Group");
@@ -1211,7 +1227,7 @@ export function setupScene(configJson?: string): string {
       } catch (e) {}
 
       // Create 3D Ground Shadow Catcher Solid
-      var groundLayer = comp.layers.addSolid([0.5, 0.5, 0.5], "Tripo4AE_Ground", 3000, 3000, 1.0);
+      var groundLayer = comp.layers.addSolid([0.5, 0.5, 0.5], "Tripo4AE_Ground", 5000, 5000, 1.0);
       groundLayer.threeDLayer = true;
       
       // Orient flat (X Rotation = 90)
@@ -1220,19 +1236,29 @@ export function setupScene(configJson?: string): string {
         try { groundRotX.setValue(90); } catch (e) {}
       }
       
-      // Position below the model
+      // Position just below the center so models touch it
       var groundPos = groundLayer.property("Position") || groundLayer.property("ADBE Position");
       if (groundPos) {
-        try { groundPos.setValue([comp.width / 2, comp.height / 2 + 250, 0]); } catch (e) {}
+        try { groundPos.setValue([comp.width / 2, comp.height / 2 + 50, 0]); } catch (e) {}
       }
       
       // Enable shadow catching (Shadows Only)
       var groundMat = groundLayer.property("ADBE Material Options Group");
       if (groundMat) {
         try {
-          var acceptsShadowsProp = groundMat.property("ADBE Accepts Shadows") || groundMat.property(2);
+          var acceptsShadowsProp = groundMat.property("ADBE Accepts Shadows") || groundMat.property(3);
           if (acceptsShadowsProp) {
             acceptsShadowsProp.setValue(2); // Shadows Only
+          }
+          // Turn off cast shadows for ground to prevent self-shadowing issues
+          var castsShadowsProp = groundMat.property("ADBE Casts Shadows") || groundMat.property(1);
+          if (castsShadowsProp) {
+            castsShadowsProp.setValue(0);
+          }
+          // Set light transmission so it doesn't block background lights
+          var lightTransProp = groundMat.property("ADBE Light Transmission") || groundMat.property(2);
+          if (lightTransProp) {
+            lightTransProp.setValue(100);
           }
         } catch (e) {}
       }
