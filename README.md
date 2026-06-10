@@ -1,590 +1,560 @@
-<img src="src/js/assets/bolt-cep.svg" alt="Bolt CEP" title="Bolt CEP" width="400" />
+# Tripo4AE
 
-A lightning-fast boilerplate for building Adobe CEP Extensions in Svelte, React, or Vue built on Vite + TypeScript + Sass
+[中文文档](#中文)
 
-![npm](https://img.shields.io/npm/v/bolt-cep)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/hyperbrew/bolt-cep/blob/master/LICENSE)
-[![Chat](https://img.shields.io/badge/chat-discord-7289da.svg)](https://discord.gg/PC3EvvuRbc)
+A first-party Adobe After Effects CEP extension integrating [Tripo AI](https://platform.tripo3d.ai/)'s full 3D generation pipeline — text/image-to-3D, animation, texturing, and seamless timeline interaction — without leaving After Effects.
+
+**Built for AE 2024+ / 2025 / 2026** with full Advanced 3D (Mercury 3D Engine) support.
+
+---
 
 ## Features
 
-- Lightning Fast Hot Module Replacement (HMR)
-- Write Modern ES6 in both the JavaScript and ExtendScript layers
-- Choose Svelte, React, or Vue for your frontend framework
-- Type-safe ExtendScript with Types-for-Adobe
-- End-to-End Type Safety with evalTS()
-- Easily configure in cep.config.ts
-- Setup for single or multi-panel extensions
-- Comes with multi-host-app configuration
-- Optimized Build Size
-- Easy Publish to ZXP for Distribution
-- Easy Package to ZIP archive with sidecar assets
-- GitHub Actions ready-to-go for ZXP Releases
+### 21 Tripo API Endpoints Covered
 
-_Full Blog Post:_ https://hyperbrew.co/blog/bolt-cep-build-extensions-faster/
+| Category | Endpoints |
+|----------|-----------|
+| **Generation** | `text_to_model`, `image_to_model`, `multiview_to_model`, `refine_model` |
+| **Image Gen** | `generate_image`, `text_to_image`, `generate_multiview_image`, `edit_multiview_image` |
+| **Texture** | `texture_model` (PBR, part-based, bake) |
+| **Animation** | `animate_prerigcheck`, `animate_rig`, `animate_retarget` (100+ presets) |
+| **Post-Process** | `convert_model` (FBX/OBJ/GLTF/USDZ/STL/3MF), `stylize_model` (7 styles) |
+| **Mesh Edit** | `mesh_segmentation`, `mesh_completion`, `highpoly_to_lowpoly` |
+| **Import** | `import_model` |
 
-### Compatibility
+### 5 UI Tabs
 
-- [Adobe CC Apps](https://www.adobe.com/creativecloud/desktop-app.html) version 2024 or later
-- Windows & Mac Intel
-- Mac Arm64 (M1-M4) require special setup ([more details](#misc-troubleshooting))
+| Tab | Function |
+|-----|----------|
+| **Generate** | Text / image / multiview → 3D model, with version/quality/seed parameters |
+| **Refine & Texture** | Refine draft models, apply PBR textures with prompt/image/style |
+| **Animation** | Tripo rig + retarget (100+ presets), plus AE keyframe/camera/loop expressions |
+| **Transform** | Stylize, mesh edit (segment/complete/simplify), format conversion |
+| **Library** | Model history, re-import, animation templates, external model import |
 
----
+### AE 2026 Advanced 3D Integration
 
-## Backers
+- **ThreeDModelLayer** detection (AE 24.4+) for script-level 3D model identification
+- **Adobe Standard Material** — 12 PBR properties (metal, transmission, reflection, IOR, etc.) via match names
+- **Embedded Animation** — select and loop GLB/FBX embedded animations via Time Remap
+- **Environment Light** — HDRI image-based lighting creation
+- **8 Material Presets** — default, metallic, glass, plastic, rubber, ceramic, gold, clay
+- **Automatic Advanced 3D renderer** activation on import
 
-Huge thanks to our backers who have helped make this project even better!
+### Pipeline & Persistence
 
-<a href="https://battleaxe.co/" target="_blank">
-<img src="https://battleaxe.dev/servile/logotype_lightgrey.png" alt="Battle Axe" title="Battle Axe" width="200" /></a>
-
-If you're interested in supporting this open-source project, please [see our sponsor page](https://github.com/sponsors/hyperbrew).
-
----
-
-## Tools Built with Bolt CEP
-
-Tools like Rubberhose 3, Klutz GPT, Brevity, and more are powered by Bolt CEP! Check out the full library of tools built with Bolt CEP:
-
-[Built with Bolt CEP](https://hyperbrew.co/resources/bolt-cep/)
-
-<img src="src/js/assets/built-with-bolt-cep.png" alt="Battle Axe" title="Battle Axe" style="border-radius:5px" width="900" />
+- **Pipeline Stepper** — visual step-by-step progress across all tabs
+- **Zustand + localStorage** — state survives CEP panel reloads (docking/undocking)
+- **Auto-resume** — incomplete generation tasks automatically resume after panel reload
+- **Adaptive polling** — uses `running_left_time` with 5s max interval cap
+- **WebSocket progress** — real-time task updates via Tripo WS API
 
 ---
 
-## Support
+## Architecture
 
-### Free Support 🙌
+```
+┌──────────────────────────────────────────────────────┐
+│                    Tripo4AE Plugin                    │
+├─────────────────────────┬────────────────────────────┤
+│   CEP Panel (React)     │   ExtendScript (.jsx)      │
+│   ────────────────      │   ────────────────         │
+│   • API Key management  │   • Import 3D model        │
+│   • Prompt / image      │   • Create 3D layer        │
+│   • Generation progress │   • Keyframe animation     │
+│   • Animation presets   │   • Camera / light setup   │
+│   • Model library       │   • PBR material control   │
+│   • Node.js HTTP/Tripo  │   • Environment light      │
+│   • Zustand state mgmt  │   • Embedded animation     │
+│   • State persistence   │   • Expression loops       │
+├─────────────────────────┴────────────────────────────┤
+│               CSInterface.js (bridge)                 │
+└──────────────────────────────────────────────────────┘
+         ↕ HTTP / WebSocket              ↕ AE DOM
+         Tripo API v2               After Effects
+```
 
-If you have questions with getting started using Bolt CEP, feel free to ask and discuss in our free Discord community [Discord Community](https://discord.gg/PC3EvvuRbc).
-
-### Paid Priority Support 🥇
-
-If your team is interested in paid consulting or development with Bolt CEP, please [contact the Hyper Brew team](https://hyperbrew.co/contact/). More info on our [Adobe Plugin Development & Consulting Services](https://hyperbrew.co/landings/boost-development)
+**Key rule**: All long-running work (HTTP, polling, file downloads) happens in the CEP/React/Node layer. ExtendScript only performs short AE DOM operations to avoid UI freezes.
 
 ---
 
-## Can I use Bolt CEP in my free or commercial project?
+## Tech Stack
 
-Yes! Bolt CEP is **100% free and open source**, being released under the MIT license with no attribution required. This means you are free to use it in your free or commercial projects.
-
-We would greatly appreciate it if you could provide a link back to this tool's info page in your product's site or about page:
-
-Bolt CEP Info Page Link: https://hyperbrew.co/resources/bolt-cep
-
-**Built with Bolt CEP** button graphics:
-
-**PNG Files**
-
-<div style="display:flex;gap:1rem;">
-<a href="./src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_White_V01.png" target="_blank">
-<img src="./src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_White_V01.png" width="200" /></a>
-
-<a href="./src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_Grey_V01.png" target="_blank">
-<img src="./src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_Grey_V01.png" width="200" /></a>
-
-<a href="./src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_Black_V01.png" target="_blank">
-<img src="./src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_Black_V01.png" width="200" /></a>
-
-</div>
-
-**SVG Files**
-
-<div style="display:flex;gap:1rem;">
-<a href="src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_White_V01.svg" target="_blank">
-<img src="src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_White_V01.svg" width="200" /></a>
-
-<a href="src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_Grey_V01.svg" target="_blank">
-<img src="src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_Grey_V01.svg" width="200" /></a>
-
-<a href="src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_Black_V01.svg" target="_blank">
-<img src="src/js/assets/built-with-bolt-cep/Built_With_BOLT_CEP_Logo_Black_V01.svg" width="200" /></a>
-</div>
-
-## Prerequisites
-
-- [Node.js 18](https://nodejs.org/en/) or later
-- Package manager either
-  - NPM (comes with Node.js)
-  - [Yarn](https://classic.yarnpkg.com/lang/en/docs/install/) ( ensure by running `yarn set version classic` )
-  - [PNPM](https://pnpm.io/installation) ( ensure by running `pnpm --version` )
-
-## Quick Start
-
-<img src="src/js/assets/bolt-cep-cli.gif" alt="Bolt CEP">
-
-Create your new Bolt CEP project (follow CLI prompts)
-
-- yarn - `yarn create bolt-cep`
-- npm - `npx create-bolt-cep`
-- pnpm - `pnpm create-bolt-cep`
-
-Change directory to the new project
-
-- `cd project`
-
-Install Dependencies (if not already done by create command)
-
-- yarn - `yarn`
-- npm - `npm i`
-- pnpm - `pnpm i`
-
-**⚠️ Enable PlayerDebugMode**
-
-- Adobe CEP's PlayerDebugMode must be enabled on your machine to test `yarn build` or `yarn dev` builds. Only an installed ZXP with `yarn zxp` will work without PlayerDebugMode enabled.
-  - Enable this easily with the [aescripts ZXP Installer](https://aescripts.com/learn/zxp-installer/) > Settings > Debug > Enable Debugging
-  - Or enable manually per OS by following the CEP Cookbook Instructions: [Adobe CEP 12 Cookbook](https://github.com/Adobe-CEP/CEP-Resources/blob/master/CEP_12.x/Documentation/CEP%2012%20HTML%20Extension%20Cookbook.md#debugging-unsigned-extensions)
-
-Build the extension (must run before `dev`, can also run after for panel to work statically without the process) Symlink is created to extensions folder.
-
-- yarn `yarn build`
-- npm `npm run build`
-- pnpm `pnpm build`
-
-Run the extension in HMR Hot-reload mode for rapid development. Both JS and ExtendScript folders re-build on changes.
-Viewable in browser via localhost:3000/panel/ (see [Panel Structure](#cep-panel-structure) to set up multiple panels)
-
-- yarn `yarn dev`
-- npm `npm run dev`
-- pnpm `pnpm dev`
-
-Build & Package the extension as a ZXP for delivery to the `dist/zxp` folder (install with [aescripts ZXP Installer](https://aescripts.com/learn/zxp-installer/) or another ZXP installer)
-
-- yarn `yarn zxp`
-- npm `npm run zxp`
-- pnpm `pnpm zxp`
-
-Bundles your packaged zxp file and specified assets from `copyZipAssets` to a zip archive in the `./zip` folder
-
-- yarn `yarn zip`
-- npm `npm run zip`
-- pnpm `pnpm zip`
+| Layer | Technology |
+|-------|-----------|
+| CEP Panel | React 19 + TypeScript + Vite |
+| State | Zustand with localStorage persist |
+| ExtendScript | ES3 via Babel + Rollup, `types-for-adobe` |
+| Build | Bolt CEP (`vite-cep-plugin`) |
+| API | Tripo OpenAPI v2 (`https://api.tripo3d.ai/v2/openapi`) |
+| Auth | Bearer API Key |
 
 ---
 
-## Config
-
-Update your CEP build and package settings in `cep.config.ts` safely typed
-
-Start building your app per framework in:
-
-- `src/js/main/main.tsx`
-- `src/js/main/main.vue`
-- `src/js/main/main.svelte`
-
-Write ExtendScript code in `src/jsx/main.ts`
-
----
-
-## CEP Panel Structure
-
-Each panel is treated as it's own page, with shared code for efficiency. The Boilerplate currently comes with 2 panels, `main` and `settings`. These are configured in the `cep.config.ts`.
-
-Each panel can be edited in their respective folders:
+## Project Structure
 
 ```
-src
- └─ js
-    ├─ main
-    │   ├─ index.html
-    |   └─ index.tsx
-    └─ settings
-        ├─ index.html
-        └─ index.tsx
-```
-
-To add panels, add an item to the panels object in `cep.config.ts`, and duplicate the folder structure and adjust as needed.
-
----
-
-## ExtendScript
-
-ExtendScript can be written in ES6 and will be compiled down to a single ES3 file for compatibility.
-
-JSON 2 is included by default, and any external JS libraries added with the include directive will be bundled as well:
-
-```js
-// @include './lib/library.js'
-```
-
-App-specific code is split into modules for type-safe development by the application's name as seen in the `index.ts`.
-
-```
-aftereffects >> aeft/aeft.ts
-illustrator >> ilst/ilst.ts
-animate >> anim/anim.ts
-```
-
-Write your app-specific functions in each of these separate modules, and they will be required per each application.
-
-To add support for additional host apps:
-
-- Add additional app module files (aeft.ts, anim.ts, etc).
-- Extend the main `switch()` in `scr/jsx/index.ts` with your additional.
-- Add the host to your `cep.config.ts` file.
-
----
-
-## Calling ExtendScript from CEP JavaScript
-
-All ExtendScript function are appended to your panel's namespace in the background to avoid namespace clashes when using `evalTS()` and `evalES()`.
-
-We have now introduced a new and improved end-to-end type-safe way to interact with ExtendScript from CEP using `evalTS()`. This function dynamically infers types from
-ExtendScript functions and handles both stringifying and parsing of the results so your developer interaction can be as simple as possible.
-
-As demonstrated in `main.tsx`, your ExtendScript functions can be called with `evalTS()` by passing the name of the function, followed by the arguments.
-
-CEP
-
-```js
-evalTS("myFunc", "test").then((res) => {
-  console.log(res);
-});
-
-evalTS("myFuncObj", { height: 90, width: 100 }).then((res) => {
-  console.log(res.x);
-  console.log(res.y);
-});
-```
-
-ExtendScript
-
-```js
-export const myFunc = (str: string) => {
-  return str;
-};
-
-export const myFuncObj = (obj: { height: number, width: number }) => {
-  return {
-    y: obj.height,
-    x: obj.width,
-  };
-};
-```
-
-For any existing Bolt CEP projects, rest assured that the legacy `evalES()` function remains in place as usual as demonstrated in `main.tsx`.
-
-```js
-evalES(`helloWorld("${csi.getApplicationID()}")`);
-```
-
-You will also want to use this function for calling ExtendScript functions in the global scope directly, by passing `true` to the second parameter:
-
-```js
-evalES(
-  `alert("Hello from ExtendScript :: " + app.appName + " " + app.version)`,
-  true,
-);
+tripo4ae/
+├── src/
+│   ├── client/                  # CEP Panel (React)
+│   │   ├── components/
+│   │   │   ├── GenerateTab/     # Tab 1: Text/image/multiview generation
+│   │   │   ├── RefineTextureTab/# Tab 2: Refine + texture + PBR
+│   │   │   ├── AnimationTab/    # Tab 3: Rig + retarget + AE animation
+│   │   │   ├── TransformTab/    # Tab 4: Stylize + mesh edit + convert
+│   │   │   ├── LibraryTab/      # Tab 5: Model library + templates
+│   │   │   ├── PipelineStepper/ # Pipeline step indicator
+│   │   │   └── common/          # Shared UI components
+│   │   ├── hooks/
+│   │   │   └── useCsInterface.ts    # CSInterface bridge hook
+│   │   ├── services/
+│   │   │   ├── httpClient.ts    # Tripo HTTP client with retry
+│   │   │   ├── tripoApi.ts      # Core API calls + download/upload
+│   │   │   ├── taskPoller.ts    # Adaptive status polling
+│   │   │   └── taskWsPoller.ts  # WebSocket real-time progress
+│   │   └── stores/
+│   │       └── useStore.ts      # Zustand + localStorage persist
+│   ├── jsx/                     # ExtendScript entry (compiled to JSX bundle)
+│   │   ├── aeft/
+│   │   │   └── aeft.ts          # All 12 host functions
+│   │   └── index.ts             # JSX entry point + host registration
+│   ├── host/                    # ExtendScript source modules (reference)
+│   │   ├── importModel.ts
+│   │   ├── animation.ts
+│   │   ├── camera.ts
+│   │   ├── lights.ts
+│   │   ├── materials.ts
+│   │   ├── environmentLight.ts
+│   │   ├── expressions.ts
+│   │   ├── e3d.ts
+│   │   └── projectInfo.ts
+│   └── shared/
+│       ├── types.ts             # All TypeScript interfaces
+│       └── constants.ts         # API versions, presets, enums
+├── __tests__/                   # Jest test suites (4 suites, 39 tests)
+├── CSXS/
+│   └── manifest.xml             # CEP extension manifest
+├── cep.config.ts                # Bolt CEP configuration
+└── package.json
 ```
 
 ---
 
-## Calling CEP JavaScript from ExtendScript
+## Getting Started
 
-For certain situations such as hooking into event listeners or sending updates during long functions, it makes sense to trigger events from the ExtendScript environment to the JavaScript environment. This can be done with `listenTS()` and `dispatchTS()`.
+### Prerequisites
 
-Using this method accounts for:
+- **After Effects** 2024+ (tested on AE 2026)
+- **Node.js** 18+
+- **npm** 9+
+- **Tripo API Key** — get one at [platform.tripo3d.ai](https://platform.tripo3d.ai/)
 
-- Setting up a scoped listener on the JS side for the CSEvent
-- Setting up PlugPlug CSEvent event on ExtendScript side
-- Ensuring End-to-End Type-Safety for the event
+### Install
 
-### 1. Declare the Event Type in EventTS in shared/universals.ts
-
-```js
-export type EventTS = {
-  myCustomEvent: {
-    oneValue: string,
-    anotherValue: number,
-  },
-  // [... other events]
-};
+```bash
+git clone <repo-url> tripo4ae
+cd tripo4ae
+npm install
 ```
 
-### 2. Listen in CEP JavaScript
+### Development
 
-```js
-import { listenTS } from "../lib/utils/bolt";
+```bash
+# 1. Enable unsigned CEP extensions (macOS)
+#    Adjust CSXS version number for your AE version:
+#    AE 2024 → CSXS.11, AE 2025 → CSXS.11, AE 2026 → CSXS.12
+defaults write com.adobe.CSXS.12 PlayerDebugMode 1
 
-listenTS("myCustomEvent", (data) => {
-  console.log("oneValue is", data.oneValue);
-  console.log("anotherValue is", data.anotherValue);
-});
+# 2. Build & symlink to Adobe CEP extensions directory
+npm run build
+npm run symlink
+
+# 3. (Re)start After Effects
+#    Open panel: Window → Extensions → Tripo4AE
 ```
 
-### 3. Dispatch in ExtendScript
+For hot-reload development:
 
-```js
-import { dispatchTS } from "../utils/utils";
-
-dispatchTS("myCustomEvent", { oneValue: "name", anotherValue: 20 });
+```bash
+npm run dev
+# Panel loads from Vite dev server at localhost:3000
 ```
 
-Alternatively, `dispatchTS()` can also be used in the same way from the CEP side to trigger events within or between CEP panels, just ensure you're importing the dispatchTS() function from the correct file within the `js` folder.
+### Production Build
 
-```js
-import { dispatchTS } from "../lib/utils/bolt";
-
-dispatchTS("myCustomEvent", { oneValue: "name", anotherValue: 20 });
+```bash
+npm run build          # Build to dist/cep/
+npm run zxp            # Package as .zxp for distribution
 ```
 
----
+### Testing
 
-## GitHub Actions ZXP Releases
-
-This repo comes with a configured GitHub Action workflow to build a ZXP and add to the releases each time a git tag is added.
-
-```
-git tag 1.0.0
-git push origin --tags
-```
-
-Then your new build will be available under GitHub Releases. For more info, see the [YML config](.github\workflows\main.yml)
-
----
-
----
-
-## Copy Assets
-
-If you have assets that you would like copied without being affected by the bundler, you can add the optional `copyAssets:[]` array inside your cep.config.ts to include files or entire folders.
-
-```js
-  copyAssets: ["public", "custom/my.jsx"],
-```
-
-**Example:**
-
-Files placed in `src/public` will be copied to `dist/public` with config set to `copyAssets: ["public"]`.
-
----
-
----
-
-## Copy Zip Assets
-
-If you have assets that you would like copied with your zxp into a zip archive for delivery, you can add the optional `copyZipAssets:[]` array inside your cep.config.ts to include files or entire folders. A folder ending in "/\*" will copy the contents without the folder structure into the zip destination.
-
-```js
-  copyZipAssets: ["instructions/*", "icons"],
+```bash
+npx jest --runInBand   # 4 suites, 39 tests
 ```
 
 ---
 
-## Custom Ponyfills
+## Usage
 
-Unlike Polyfills which modify the global prototype, Ponyfills replace functionality with custom methods. Built-in Ponyfills include:
+### 1. Set API Key
 
-- Object.freeze()
-- Array.isArray()
+Enter your Tripo API key in the header input. The key is persisted in localStorage across sessions.
 
-You can add your own Ponyfils by passing them into the `jsxPonyfill()` function in `vite.es.config.ts`:
+### 2. Generate a 3D Model
 
-```js
-jsxPonyfill([
-  {
-    find: "Array.isArray",
-    replace: "__isArray",
-    inject: `function __isArray(arr) { try { return arr instanceof Array; } catch (e) { return false; } };`,
-  },
-]);
-```
+- Select **Text**, **Image**, or **Multiview** input mode
+- Enter a prompt or drag-drop images
+- Adjust parameters (model version, face limit, PBR, quality, seeds)
+- Click **Generate** and watch the progress bar
 
-If you have a common Ponyfill you feel should be built-in, create a ticket and we'll look into it.
+### 3. Import to After Effects
 
----
+When generation completes:
 
-## ExtendScript Scope
+- Click **Import to AE**
+- The model is downloaded to `~/Documents/Tripo4AE/Models/`
+- A 3D model layer is created in the active composition
+- Advanced 3D renderer is automatically activated
+- Time Remap is enabled for embedded animation access
+- If no comp is open, a new 1920×1080 comp is created automatically
 
-This boilerplate is flavored for a single JSX object attached to helper object `$` for all your panels to prevent pollution in the global namespace. If you prefer to include your own raw JSX, include it in the Copy Assets object (above), and add the optional scriptPath object to your cep.config.ts file.
+### 4. Post-Process Pipeline
 
-```js
-  panels: [
-    {
-      name: "main",
-      scriptPath: "custom/index.jsx",
-      [...]
-    },
-    {
-      name: "settings",
-      scriptPath: "custom/settings.jsx",
-      [...]
-    },
-  ],
-  copyAssets: ["custom"],
-```
+Use the pipeline stepper or individual tabs to:
 
----
+- **Refine** → upgrade draft models to higher quality
+- **Texture** → apply new PBR textures with text/image prompts
+- **Rig & Animate** → check riggability, rig, then apply 100+ animation presets
+- **Convert** → export to FBX/OBJ/USDZ/STL/3MF
+- **Stylize** → lego, voxel, voronoi, minecraft, keyring, etc.
 
-## Invisible Panels
+### 5. AE Animation
 
-To make one or more of your panels an invisible panel, aka hidden from the Extensions menu, make sure to leave the panelDisplayName as an empty string in `cep.config.ts`
+Apply built-in AE animations to imported models:
 
-```js
-  panels: [
-    {
-      mainPath: "./main/index.html",
-      name: "Invisible Bolt CEP",
-      panelDisplayName: "",
-      ...
-    }
-  ]
-```
-
-If you want the extension to be completely headless without any UI, make sure to set the `type` to Custom as well:
-
-```js
-  panels: [
-    {
-      mainPath: "./main/index.html",
-      name: "Invisible Bolt CEP",
-      panelDisplayName: "",
-      type: "Custom",
-      ...
-    }
-  ]
-```
-
-You'll want to ensure your panel can be launched from another panel with `csi.requestOpenExtension()` or with an auto-start event in `startOnEvents` in `cep.config.ts` event depending on the app:
-
-```js
-  panels: [
-    {
-      mainPath: "./main/index.html",
-      name: "Invisible Bolt CEP",
-      panelDisplayName: "",
-      type: "Custom",
-      startOnEvents: [
-        "com.adobe.csxs.events.ApplicationActivate",
-        "com.adobe.csxs.events.ApplicationInitialized",
-        "applicationActivate",
-      ],
-      ...
-    }
-  ]
-```
-
-Reference the [Adobe CEP Cookbook](https://github.com/Adobe-CEP/CEP-Resources/blob/master/CEP_11.x/Documentation/CEP%2011.1%20HTML%20Extension%20Cookbook.md) for more info on [invisible panels](https://github.com/Adobe-CEP/CEP-Resources/blob/master/CEP_11.x/Documentation/CEP%2011.1%20HTML%20Extension%20Cookbook.md#invisible-html-extensions) and [CEP events](https://github.com/Adobe-CEP/CEP-Resources/blob/master/CEP_11.x/Documentation/CEP%2011.1%20HTML%20Extension%20Cookbook.md#invisible-html-extensions)
+- **Camera presets**: Orbit, Push, Track, Jib
+- **Model presets**: Fade-in, Scale Pop, Flip, Slide-in
+- **Loop expressions**: Spin (X/Y/Z), Float, Breathe
+- **Easing**: Linear, Ease In/Out, Bounce, Elastic
+- **Material presets**: Metallic, Glass, Plastic, Rubber, Ceramic, Gold, Clay
 
 ---
 
-## Troubleshooting Modules
+## ExtendScript API Reference
 
-Node.js Built-in modules can be imported from the `src/js/lib/node.ts` file.
+All 12 host functions are registered as `host["tripo4ae"]` and available via `evalScript('tripo4ae.functionName(args)')`:
 
-```js
-import { os, path, fs } from "../lib/node";
-```
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `getActiveCompInfo` | `() → JSON` | Returns active comp name, dimensions, frame rate, duration |
+| `importModel` | `(path: string, config?: JSON) → JSON` | Import 3D model with Advanced 3D, auto-center, time remap |
+| `applyAnimation` | `(config: JSON) → JSON` | Apply keyframe presets + loop expressions to selected layer |
+| `selectEmbeddedAnimation` | `(config: JSON) → JSON` | Select/loop embedded GLB animations via Animation Options |
+| `createCamera` | `(config: JSON) → JSON` | Create camera with orbit/push/track/jib preset |
+| `createLights` | `(config?: JSON) → JSON` | Create three-point lighting setup |
+| `setupE3D` | `(modelPath: string) → JSON` | Set up Element 3D layer (legacy, AE 2024 only) |
+| `setMaterialProperties` | `(config: JSON) → JSON` | Set PBR material properties via match names |
+| `getMaterialProperties` | `(layerIndex?: number) → JSON` | Read current material properties |
+| `createEnvironmentLight` | `(config?: JSON) → JSON` | Create HDRI environment light with optional HDR file |
+| `getExpression` | `(type: string, params?: JSON) → string` | Get AE expression string (spin/float/breathe) |
 
-To use 3rd party libraries, first attempt to use with the standard import syntax.
-
-```js
-import { FaBolt } from "react-icons/fa";
-```
-
-If the import syntax fails (typically with modules that use the Node.js runtime) you can resort to the Node.js `require()` syntax,
-
-```js
-const unzipper = require("unzipper");
-```
-
-The build system will detect any non-built-in Node.js modules using `require()` and copy them to the output `node_modules` folder, but if a package is missed, you can add it explicitly to the `installModules:[]` array inside your `cep.config.ts` file.
-
-```js
-  installModules: ["unzipper"],
-```
-
-Also if they're Node.js-specific modules, it's best to place the requires inside functions so they are only required at runtime and don't break your panel when previewing in the browser.
+All functions return `JSON.stringify({ ok: true, data: {...} })` on success or `JSON.stringify({ ok: false, error: "..." })` on failure.
 
 ---
 
-## A Note on Routers
+## Supported Model Versions
 
-If you would like to set up a routing system like react-router, be aware that you'll have to make adjustments for CEP. React Router for instance bases the router path off of `window.location.pathname` which in the browser resolves to the page:
+| Version | Label | Description |
+|---------|-------|-------------|
+| `v3.1-20260211` | v3.1 | Latest high-quality |
+| `P1-20260311` | P1 | Low-poly optimized (limited params) |
+| `Turbo-v1.0-20250506` | Turbo | Fast draft |
+| `v3.0-20250812` | v3.0 | Stable v3 |
+| `v2.5-20250123` | v2.5 | Legacy default |
 
-`/main/index.html`
+**Note**: P1 version does not support `quad`, `geometry_quality`, `texture_quality`, or `style` parameters. These are automatically filtered when P1 is selected.
 
-yet in CEP context resolves to the full system path:
+---
 
-`file:///C:/Users/Username/AppData/Roaming/Adobe/CEP/extensions/com.bolt.cep/main/index.html`
+## Model Download Priority
 
-To solve this, you'll need to adjust the router basename for each context, here is one way of accomplishing that with the panel named `main`:
+When importing, the plugin selects the best available model URL:
 
-```js
-const posix = (str: string) => str.replace(/\\/g, "/");
-
-const cepBasename = window.cep_node
-  ? `${posix(window.cep_node.global.__dirname)}/`
-  : "/main/";
-
-ReactDOM.render(
-  <React.StrictMode>
-    <Router basename={cepBasename}>[...]</Router>
-  </React.StrictMode>,
-  document.getElementById("app")
-);
+```
+pbr_model > model > base_model
 ```
 
-## Misc Troubleshooting
+Models are downloaded to `~/Documents/Tripo4AE/Models/` before importing to AE, since ExtendScript requires local file paths.
 
-**Can't build JSXBIN on MacOS with PNPM**
+---
 
-There is a known bug with pnpm not running postinstall scripts [more info](https://github.com/pnpm/pnpm/issues/4649) [and here](https://github.com/pnpm/pnpm/issues/4649)
+## Key Technical Decisions
 
-Since the [jsxbin](https://github.com/runegan/jsxbin) package requires the `postinstall` script, to fix this for now, cd into `node_modules/jsxbin` and run `pnpm run postinstall` to create the needed binaries. Now building JSXBIN will work successfully.
+1. **CEP over UXP** — AE 2026 does not support UXP panels. CEP is the path. React UI is reusable if UXP arrives.
+2. **AE Native 3D primary** — AE 2024+ supports GLB import with Mercury 3D. E3D deferred (only supports AE 2024).
+3. **Long ops in CEP, short ops in ExtendScript** — HTTP/polling/download in CEP async. ExtendScript only touches AE DOM for quick operations.
+4. **GLB as primary format** — Single-file, embedded PBR + animations. Tripo outputs GLB by default.
+5. **Runtime require() for Node.js** — CEP provides Node.js via `require()`. Using runtime require instead of static `import fs` avoids Vite externalization issues.
+6. **Zustand + persist** — Lightweight, no provider, easy localStorage persistence for panel reload resilience.
+7. **Bolt CEP** — Proven scaffolding with hot reload, JSX compilation, and ZXP packaging.
 
-**React Spectrum won't allow certain UI items to be clicked on MacOS**:
+---
 
-There is an ongoing bug with React Spectrum and other UI libraries on MacOS with clicking elements. To resolve this issue, run the helper function `enableSpectrum()` to resolve this issue on Mac.
+## License
 
-`main.ts`
+Private project. All rights reserved.
 
-```js
-import { initBolt, enableSpectrum } from "../lib/utils/bolt";
+---
 
-enableSpectrum();
-initBolt();
+<a id="中文"></a>
+
+# 中文
+
+一个 Adobe After Effects CEP 扩展插件，集成 [Tripo AI](https://platform.tripo3d.ai/) 完整的 3D 生成管线——文本/图片转 3D、动画、纹理贴图、无缝时间线交互——全程无需离开 After Effects。
+
+**针对 AE 2024+ / 2025 / 2026 构建**，完整支持 Advanced 3D（Mercury 3D 引擎）。
+
+---
+
+## 功能亮点
+
+### 覆盖 21 个 Tripo API 端点
+
+| 分类 | 端点 |
+|------|------|
+| **生成** | `text_to_model`、`image_to_model`、`multiview_to_model`、`refine_model` |
+| **图片生成** | `generate_image`、`text_to_image`、`generate_multiview_image`、`edit_multiview_image` |
+| **纹理** | `texture_model`（PBR、分部件、烘焙） |
+| **动画** | `animate_prerigcheck`、`animate_rig`、`animate_retarget`（100+ 预设） |
+| **后处理** | `convert_model`（FBX/OBJ/GLTF/USDZ/STL/3MF）、`stylize_model`（7 种风格） |
+| **网格编辑** | `mesh_segmentation`、`mesh_completion`、`highpoly_to_lowpoly` |
+| **导入** | `import_model` |
+
+### 5 个功能标签页
+
+| 标签页 | 功能 |
+|--------|------|
+| **生成** | 文本/图片/多视图 → 3D 模型，支持版本/面数/质量/种子参数 |
+| **精修与纹理** | 精修草稿模型，通过文本/图片/风格图应用 PBR 纹理 |
+| **动画** | Tripo 绑定 + 重定向（100+ 预设），以及 AE 关键帧/摄像机/循环表达式 |
+| **变换** | 风格化、网格编辑（分割/补全/简化）、格式转换 |
+| **模型库** | 模型历史、重新导入、动画模板、外部模型导入 |
+
+### AE 2026 高级 3D 集成
+
+- **ThreeDModelLayer 检测**（AE 24.4+）— 脚本级 3D 模型图层识别
+- **Adobe Standard Material** — 12 项 PBR 属性（金属、透射、反射、IOR 等）通过 match name 控制
+- **嵌入动画** — 通过 Time Remap 选择并循环 GLB/FBX 中的嵌入动画
+- **环境光** — 创建 HDRI 图像照明
+- **8 种材质预设** — 默认、金属、玻璃、塑料、橡胶、陶瓷、黄金、陶土
+- **自动激活 Advanced 3D 渲染器**
+
+### 管线与持久化
+
+- **管线步骤指示器** — 跨标签页的可视化步骤进度
+- **Zustand + localStorage** — 面板重载（吸附/取消吸附）后状态不丢失
+- **自动恢复** — 面板重载后自动继续未完成的生成任务
+- **自适应轮询** — 根据 `running_left_time` 智能调整，最大间隔 5 秒
+- **WebSocket 实时进度** — 通过 Tripo WS API 获取实时任务更新
+
+---
+
+## 架构
+
+```
+┌──────────────────────────────────────────────────────┐
+│                    Tripo4AE 插件                      │
+├─────────────────────────┬────────────────────────────┤
+│   CEP 面板 (React)      │   ExtendScript (.jsx)      │
+│   ────────────────      │   ────────────────         │
+│   • API Key 管理        │   • 导入 3D 模型           │
+│   • 提示词/图片输入     │   • 创建 3D 图层           │
+│   • 生成进度显示        │   • 关键帧动画             │
+│   • 动画预设选择        │   • 摄像机/灯光设置        │
+│   • 模型库管理          │   • PBR 材质控制           │
+│   • Node.js HTTP/Tripo  │   • 环境光                 │
+│   • Zustand 状态管理    │   • 嵌入动画控制           │
+│   • 状态持久化          │   • 表达式循环             │
+├─────────────────────────┴────────────────────────────┤
+│               CSInterface.js（桥接层）                │
+└──────────────────────────────────────────────────────┘
+         ↕ HTTP / WebSocket              ↕ AE DOM
+         Tripo API v2               After Effects
 ```
 
-Additionally, some users have reported that adding the following CEF Flag will resolve the issue as well:
+**核心原则**：所有耗时操作（HTTP、轮询、文件下载）在 CEP/React/Node 异步层执行。ExtendScript 只进行简短的 AE DOM 操作，避免 UI 冻结。
 
-`cep.config.ts`
+---
 
-```js
-...
-parameters: [
-  ...
-  '--disable-site-isolation-trials'
-  ],
-...
+## 技术栈
+
+| 层 | 技术 |
+|---|------|
+| CEP 面板 | React 19 + TypeScript + Vite |
+| 状态管理 | Zustand + localStorage 持久化 |
+| ExtendScript | ES3 经 Babel + Rollup 编译，`types-for-adobe` |
+| 构建 | Bolt CEP (`vite-cep-plugin`) |
+| API | Tripo OpenAPI v2 (`https://api.tripo3d.ai/v2/openapi`) |
+| 认证 | Bearer API Key |
+
+---
+
+## 快速开始
+
+### 前置条件
+
+- **After Effects** 2024+（在 AE 2026 上测试）
+- **Node.js** 18+
+- **npm** 9+
+- **Tripo API Key** — 在 [platform.tripo3d.ai](https://platform.tripo3d.ai/) 获取
+
+### 安装
+
+```bash
+git clone <仓库地址> tripo4ae
+cd tripo4ae
+npm install
 ```
 
-**ZXPSignCmd Fails on Mac or Windows**:
+### 开发
 
-4/18/2025 ZXPSignCmd broke on Windows across the board and on MacOS for most TSA services. ( [more info](https://community.adobe.com/t5/premiere-pro-bugs/zxpsigncmd-sign-process-is-broken-segmentation-fault/idc-p/15276912#M49107) )
+```bash
+# 1. 开启 CEP 未签名插件支持（macOS）
+#    根据 AE 版本选择 CSXS 版本号：
+#    AE 2024 → CSXS.11, AE 2025 → CSXS.11, AE 2026 → CSXS.12
+defaults write com.adobe.CSXS.12 PlayerDebugMode 1
 
-4/30/2025 Adobe fixed the issues for Windows and MacOS, and we have included the updated ZXPSignCmd for both OS's in the latest release of `vite-cep-plugin@1.2.9`.
+# 2. 构建并符号链接到 Adobe CEP 扩展目录
+npm run build
+npm run symlink
 
-To use the latest in your existing Bolt CEP project, run `yarn add vite-cep-plugin`, and make sure your `zxp.tsa` settings in `cep.config.ts` match the [latest format](./cep.config.ts).
+# 3. 重启 After Effects
+#    打开面板：窗口 → 扩展 → Tripo4AE
+```
 
-**Build Issues on Mac Arm64 Apple Silicon Machines (M1/M2/M3)**
+热重载开发模式：
 
-5/13/2025 - jsxbin is now natively supported on Apple Silicon machines. More info here: [Setup ExtendScript Dev for Apple Silicon Macs](https://hyperbrew.co/blog/adobe-extendscript-support-for-apple-silicon/)
+```bash
+npm run dev
+# 面板从 Vite 开发服务器加载，地址 localhost:3000
+```
 
-**Update a Bolt CEP Project** To update an existing Bolt CEP project to the the latest version, create a new Bolt CEP project with the same framework (React, Vue, Svelte), then compare and update the following files:
+### 生产构建
 
-1. `package.json` - Update all dependencies and scripts ( `vite-cep-plugin` - usually contains the most frequent updates ). Make sure to re-install dependencies after updating.
-2. `vite.config.ts` - Unless you've modified the vite config yourself, you can just copy the contents of the latest into yours.
-3. `vite.es.config.ts` - Like the previous config, unless you've modified it yourself, you can just copy the contents of the latest into yours.
-4. `cep.config.ts` - Check if any new properties have been added that don't exist in your config.
-5. `src/js/lib` - Update this entire folder.
-6. `src/js/main/index.html` - Update the index HTML file
-7. `src/js/main/index-[framework].[ext]` - Update the index file for your framework (React, Vue, Svelte)
-8. `src/jsx/index.ts` - Check if any new properties have been added that don't exist in your config.
-9. `src/shared/universals.d.ts` - Check if any new properties have been added that don't exist in your config.
+```bash
+npm run build          # 构建到 dist/cep/
+npm run zxp            # 打包为 .zxp 用于分发
+```
 
-**ZXPSignCmd Permissions issues on Mac**:
+### 测试
 
-Previously, you would need to fix the permissions of ZXPSignCmd by running the following command in the terminal, however this is now automated since `vite-cep-plugin@1.1.15`. If you still experience problems other reasons you can manually fix the executable as follows:
+```bash
+npx jest --runInBand   # 4 个测试套件，39 个测试
+```
 
-If you're getting permissions errors running ZXPSignCmd on the latest Mac releases, try a fresh clone. If that does't work, reset permissions for ZXPSignCmd by opening the directory `node_modules/vite-cep-plugin/lib/bin` and running `chmod 700 ./ZXPSignCmd`.
+---
+
+## 使用流程
+
+### 1. 设置 API Key
+
+在面板顶部输入你的 Tripo API Key。密钥会持久化到 localStorage，跨会话保留。
+
+### 2. 生成 3D 模型
+
+- 选择**文本**、**图片**或**多视图**输入模式
+- 输入提示词或拖拽上传图片
+- 调整参数（模型版本、面数限制、PBR、质量、种子值）
+- 点击**生成**，观察进度条
+
+### 3. 导入 After Effects
+
+生成完成后：
+
+- 点击 **Import to AE**
+- 模型自动下载到 `~/Documents/Tripo4AE/Models/`
+- 在当前合成中创建 3D 模型图层
+- 自动激活 Advanced 3D 渲染器
+- 启用 Time Remap 以访问嵌入动画
+- 如果没有打开的合成，自动创建 1920×1080 合成
+
+### 4. 后续处理管线
+
+使用管线步骤指示器或各标签页：
+
+- **精修** → 将草稿模型升级为高质量
+- **纹理** → 通过文本/图片提示词应用新 PBR 纹理
+- **绑定与动画** → 检查可绑定性、绑定、应用 100+ 动画预设
+- **转换** → 导出为 FBX/OBJ/USDZ/STL/3MF
+- **风格化** → 乐高、体素、泰森多边形、我的世界、钥匙扣等
+
+### 5. AE 动画
+
+对导入的模型应用内置 AE 动画：
+
+- **摄像机预设**：环绕、推入、平移、摇臂
+- **模型预设**：淡入、缩放弹出、翻转、滑入
+- **循环表达式**：旋转（X/Y/Z）、浮动、呼吸
+- **缓动**：线性、缓入缓出、弹跳、弹性
+- **材质预设**：金属、玻璃、塑料、橡胶、陶瓷、黄金、陶土
+
+---
+
+## ExtendScript 接口参考
+
+全部 12 个宿主函数注册为 `host["tripo4ae"]`，通过 `evalScript('tripo4ae.函数名(参数)')` 调用：
+
+| 函数 | 签名 | 说明 |
+|------|------|------|
+| `getActiveCompInfo` | `() → JSON` | 返回当前合成的名称、尺寸、帧率、时长 |
+| `importModel` | `(path, config?) → JSON` | 导入 3D 模型，自动激活 Advanced 3D、居中、启用 Time Remap |
+| `applyAnimation` | `(config) → JSON` | 对选中图层应用关键帧预设 + 循环表达式 |
+| `selectEmbeddedAnimation` | `(config) → JSON` | 选择/循环嵌入的 GLB 动画 |
+| `createCamera` | `(config) → JSON` | 创建摄像机（环绕/推入/平移/摇臂） |
+| `createLights` | `(config?) → JSON` | 创建三点布光 |
+| `setupE3D` | `(modelPath) → JSON` | 设置 Element 3D 图层（旧版，仅 AE 2024） |
+| `setMaterialProperties` | `(config) → JSON` | 通过 match name 设置 PBR 材质属性 |
+| `getMaterialProperties` | `(layerIndex?) → JSON` | 读取当前材质属性 |
+| `createEnvironmentLight` | `(config?) → JSON` | 创建 HDRI 环境光，支持 HDR 文件 |
+| `getExpression` | `(type, params?) → string` | 获取 AE 表达式字符串（旋转/浮动/呼吸） |
+
+所有函数成功时返回 `JSON.stringify({ ok: true, data: {...} })`，失败时返回 `JSON.stringify({ ok: false, error: "..." })`。
+
+---
+
+## 支持的模型版本
+
+| 版本 | 标签 | 说明 |
+|------|------|------|
+| `v3.1-20260211` | v3.1 | 最新高质量 |
+| `P1-20260311` | P1 | 低多边形优化（参数有限） |
+| `Turbo-v1.0-20250506` | Turbo | 快速草稿 |
+| `v3.0-20250812` | v3.0 | 稳定 v3 |
+| `v2.5-20250123` | v2.5 | 旧版默认 |
+
+**注意**：P1 版本不支持 `quad`、`geometry_quality`、`texture_quality` 和 `style` 参数。选择 P1 时会自动过滤这些字段。
+
+---
+
+## 模型下载优先级
+
+导入时，插件按以下优先级选择最佳模型 URL：
+
+```
+pbr_model > model > base_model
+```
+
+模型先下载到本地 `~/Documents/Tripo4AE/Models/` 再导入 AE，因为 ExtendScript 需要本地文件路径。
+
+---
+
+## 关键技术决策
+
+1. **CEP 而非 UXP** — AE 2026 不支持 UXP 面板。CEP 是当前路径。如果 UXP 到来，React UI 可复用。
+2. **AE 原生 3D 为主** — AE 2024+ 支持 GLB 导入和 Mercury 3D。E3D 已搁置（仅支持 AE 2024）。
+3. **长操作在 CEP，短操作在 ExtendScript** — HTTP/轮询/下载在 CEP 异步执行。ExtendScript 只做简短 AE DOM 操作。
+4. **GLB 为主格式** — 单文件、内嵌 PBR + 动画。Tripo 默认输出 GLB。
+5. **运行时 require() 获取 Node.js** — CEP 通过 `require()` 提供 Node.js。使用运行时 require 而非静态 `import fs` 避免 Vite 外部化问题。
+6. **Zustand + 持久化** — 轻量、无需 Provider、易于 localStorage 持久化，面板重载不丢数据。
+7. **Bolt CEP** — 成熟的脚手架，支持热重载、JSX 编译、ZXP 打包。
