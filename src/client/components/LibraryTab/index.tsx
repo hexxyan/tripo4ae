@@ -226,11 +226,10 @@ export function LibraryTab() {
     }
   }, [apiKey, csInterface, getStepName, t, upsertModel]);
 
-  const loadTemplate = useCallback((tmpl: AnimTemplate) => {
-    // Templates are loaded from the Animation tab; just show a confirmation
+  const loadTemplate = useCallback(async (tmpl: AnimTemplate) => {
     setError(null);
     try {
-      csInterface.applyAnimation(tmpl.config);
+      await csInterface.applyAnimation(tmpl.config);
     } catch (err: any) {
       setError(err.message || t('statusFailed'));
     }

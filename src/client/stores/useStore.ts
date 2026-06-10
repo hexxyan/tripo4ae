@@ -21,6 +21,7 @@ interface TripoState {
   removeModel: (id: string) => void;
   setCompInfo: (info: CompInfo | null) => void;
   addTemplate: (template: AnimTemplate) => void;
+  removeTemplate: (id: string) => void;
   setLanguage: (lang: 'en' | 'zh') => void;
   reset: () => void;
 }
@@ -70,6 +71,7 @@ export const useStore = create<TripoState>()(
             (m) =>
               m.id === model.id ||
               (
+                model.taskId != null &&
                 m.taskId === model.taskId &&
                 m.workflow === model.workflow
               ),
@@ -91,6 +93,11 @@ export const useStore = create<TripoState>()(
 
       addTemplate: (template) =>
         set((state) => ({ templates: [...state.templates, template] })),
+
+      removeTemplate: (id) =>
+        set((state) => ({
+          templates: state.templates.filter((t) => t.id !== id),
+        })),
 
       reset: () => set(initialState),
     }),

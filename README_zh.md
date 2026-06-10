@@ -589,4 +589,4 @@ pbr_model > model > base_model
 
 ## 许可证
 
-私有项目，保留所有权利。
+[MIT](LICENSE) © 2025-2026 hexxyan

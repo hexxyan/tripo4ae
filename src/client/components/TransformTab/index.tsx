@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
-import { TaskPoller } from '../../services/taskPoller';
+import { TaskPoller, CancelledError } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
 import { useTranslation } from '../../hooks/useTranslation';
 import { STYLIZE_STYLES, CONVERT_FORMATS } from '../../../shared/constants';
@@ -26,13 +26,14 @@ export function TransformTab() {
   const { t } = useTranslation();
 
   const importedTaskIds = useRef(new Set<string>());
+  const pollerRef = useRef<TaskPoller | null>(null);
 
   const importTaskToAe = useCallback(async (task: TripoTask, label: string) => {
     if (importedTaskIds.current.has(task.task_id)) return;
     importedTaskIds.current.add(task.task_id);
     try {
       const api = new TripoApiService(apiKey!);
-      const modelUrl = api.getModelUrl(task.output);
+      const modelUrl = api.getModelUrl(task.output ?? {});
       if (!modelUrl) return;
 
       const saveDir = TripoApiService.getModelSaveDir();
@@ -40,21 +41,24 @@ export function TransformTab() {
 
       await csInterface.importModel(localPath);
 
+      const ext = localPath.split('.').pop()?.toUpperCase();
+      const format = (ext === 'FBX' || ext === 'OBJ' || ext === 'GLTF') ? ext : 'GLB';
+
       const model: ModelRecord = {
         id: task.task_id,
         taskId: task.task_id,
         name: label,
         thumbnailUrl: task.output?.rendered_image,
         modelPath: localPath,
-        format: 'GLB',
+        format,
         createdAt: Date.now(),
-        pipelineSteps: [...pipeline],
+        pipelineSteps: [...useStore.getState().pipeline],
       };
       addModel(model);
     } catch {
       // Non-blocking
     }
-  }, [apiKey, csInterface, addModel, pipeline]);
+  }, [apiKey, csInterface, addModel]);
 
   const modelSteps = pipeline.filter((s) => s.status === 'success' && s.taskId);
   const [modelStepIdx, setModelStepIdx] = useState(-1);
@@ -67,6 +71,7 @@ export function TransformTab() {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('');
   const [isRunning, setIsRunning] = useState(false);
+  const isRunningRef = useRef(false);
 
   const getModelTaskId = useCallback(() => {
     return modelSteps[modelStepIdx]?.taskId ?? null;
@@ -76,6 +81,8 @@ export function TransformTab() {
     type: string,
     params: Record<string, unknown>,
   ) => {
+    if (isRunningRef.current) return;
+    isRunningRef.current = true;
     const taskId = getModelTaskId();
     if (!taskId) { setError(t('selectModelWarning')); return; }
 
@@ -95,6 +102,7 @@ export function TransformTab() {
         status: 'pending',
         params: params as any,
       };
+      nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
       taskIdxRef.current = nextStepIdx.current++;
       addPipelineStep(step);
 
@@ -102,6 +110,7 @@ export function TransformTab() {
       updatePipelineStep(taskIdxRef.current, { taskId: newTaskId, status: 'running' });
 
       const poller = new TaskPoller({ getTask: (id) => api.getTask(id) });
+      pollerRef.current = poller;
       const res = await poller.pollUntilDone(newTaskId, {
         onProgress: (task) => {
           setProgress(task.progress);
@@ -126,12 +135,17 @@ export function TransformTab() {
       await importTaskToAe(res, `${t(type)} result`);
       setStatusText(t('statusSuccess'));
     } catch (err: any) {
+      if (err instanceof CancelledError) {
+        return;
+      }
       setError(err.message || t('statusFailed'));
       if (taskIdxRef.current >= 0) {
         updatePipelineStep(taskIdxRef.current, { status: 'failed' });
       }
     } finally {
+      isRunningRef.current = false;
       setIsRunning(false);
+      pollerRef.current = null;
     }
   }, [apiKey, pipeline, getModelTaskId, addPipelineStep, updatePipelineStep, importTaskToAe, t]);
 
@@ -177,6 +191,7 @@ export function TransformTab() {
         status: 'pending',
         params: { type: 'mesh_segmentation', original_model_task_id: taskId },
       };
+      nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
       taskIdxRef.current = nextStepIdx.current++;
       addPipelineStep(step);
 
@@ -187,6 +202,7 @@ export function TransformTab() {
       updatePipelineStep(taskIdxRef.current, { taskId: newTaskId, status: 'running' });
 
       const poller = new TaskPoller({ getTask: (id) => api.getTask(id) });
+      pollerRef.current = poller;
       const res = await poller.pollUntilDone(newTaskId, {
         onProgress: (task) => {
           setProgress(task.progress);
@@ -209,12 +225,17 @@ export function TransformTab() {
       await importTaskToAe(res, 'Segmented Model');
       setStatusText(t('statusSuccess'));
     } catch (err: any) {
+      if (err instanceof CancelledError) {
+        // User cancelled — do not treat as error
+        return;
+      }
       setError(err.message || t('statusFailed'));
       if (taskIdxRef.current >= 0) {
         updatePipelineStep(taskIdxRef.current, { status: 'failed' });
       }
     } finally {
       setIsRunning(false);
+      pollerRef.current = null;
     }
   }, [apiKey, pipeline, getModelTaskId, addPipelineStep, updatePipelineStep, importTaskToAe, t]);
 
@@ -233,23 +254,13 @@ export function TransformTab() {
   const handleSimplify = useCallback(() => {
     const taskId = getModelTaskId();
     if (!taskId) { setError(t('selectModelWarning')); return; }
-    if (simplifyHighpoly) {
-      runTask('highpoly_to_lowpoly', {
-        type: 'highpoly_to_lowpoly',
-        original_model_task_id: taskId,
-        quad: simplifyQuad,
-        face_limit: simplifyFaceLimit,
-      });
-    } else {
-      runTask('convert_model', {
-        type: 'convert_model',
-        original_model_task_id: taskId,
-        format: 'GLTF',
-        quad: simplifyQuad,
-        face_limit: simplifyFaceLimit,
-      });
-    }
-  }, [simplifyQuad, simplifyFaceLimit, simplifyHighpoly, getModelTaskId, runTask, t]);
+    runTask('highpoly_to_lowpoly', {
+      type: 'highpoly_to_lowpoly',
+      original_model_task_id: taskId,
+      quad: simplifyQuad,
+      face_limit: simplifyFaceLimit,
+    });
+  }, [simplifyQuad, simplifyFaceLimit, getModelTaskId, runTask, t]);
 
   // Convert
   const [convertFormat, setConvertFormat] = useState<ConvertFormat>('FBX');
@@ -399,7 +410,27 @@ export function TransformTab() {
       </div>
 
       {/* Progress */}
-      {isRunning && <ProgressBar progress={progress} status={statusText} />}
+      {isRunning && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <ProgressBar progress={progress} status={statusText} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => {
+                if (pollerRef.current) {
+                  pollerRef.current.abort();
+                  pollerRef.current = null;
+                }
+                setIsRunning(false);
+                setProgress(0);
+                setStatusText('');
+              }}
+              style={styles.cancelBtn}
+            >
+              {t('cancelBtn')}
+            </button>
+          </div>
+        </div>
+      )}
       {error && <div style={styles.error}>{error}</div>}
 
       {/* Result */}
@@ -457,5 +488,14 @@ const styles: Record<string, React.CSSProperties> = {
   previewImg: {
     width: '100%', maxHeight: 120, objectFit: 'contain' as const,
     borderRadius: 4, border: '1px solid #444',
+  },
+  cancelBtn: {
+    padding: '3px 8px',
+    border: '1px solid #662222',
+    borderRadius: 3,
+    backgroundColor: '#3a1a1a',
+    color: '#ff6b6b',
+    fontSize: 9,
+    cursor: 'pointer',
   },
 };

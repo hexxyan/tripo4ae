@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
-import { TaskPoller } from '../../services/taskPoller';
+import { TaskPoller, CancelledError } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
 import { useTranslation } from '../../hooks/useTranslation';
 import type {
@@ -29,6 +29,8 @@ export function RefineTextureTab() {
   const { t } = useTranslation();
 
   const importedTaskIds = useRef(new Set<string>());
+  const refinePollerRef = useRef<TaskPoller | null>(null);
+  const texPollerRef = useRef<TaskPoller | null>(null);
 
   // Auto-import completed task: download → import AE → persist Library
   const importTaskToAe = useCallback(async (task: TripoTask, label: string) => {
@@ -36,7 +38,7 @@ export function RefineTextureTab() {
     importedTaskIds.current.add(task.task_id);
     try {
       const api = new TripoApiService(apiKey!);
-      const modelUrl = api.getModelUrl(task.output);
+      const modelUrl = api.getModelUrl(task.output ?? {});
       if (!modelUrl) return;
 
       const saveDir = TripoApiService.getModelSaveDir();
@@ -44,21 +46,24 @@ export function RefineTextureTab() {
 
       await csInterface.importModel(localPath);
 
+      const ext = localPath.split('.').pop()?.toUpperCase();
+      const format = (ext === 'FBX' || ext === 'OBJ' || ext === 'GLTF') ? ext : 'GLB';
+
       const model: ModelRecord = {
         id: task.task_id,
         taskId: task.task_id,
         name: label,
         thumbnailUrl: task.output?.rendered_image,
         modelPath: localPath,
-        format: 'GLB',
+        format,
         createdAt: Date.now(),
-        pipelineSteps: [...pipeline],
+        pipelineSteps: [...useStore.getState().pipeline],
       };
       addModel(model);
     } catch {
       // Non-blocking: result is still visible in pipeline
     }
-  }, [apiKey, csInterface, addModel, pipeline]);
+  }, [apiKey, csInterface, addModel]);
 
   // Refine state
   const [selectedStepIdx, setSelectedStepIdx] = useState<number>(-1);
@@ -137,6 +142,7 @@ export function RefineTextureTab() {
         status: 'pending',
         params: req,
       };
+      nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
       refineIdxRef.current = nextStepIdx.current++;
       addPipelineStep(step);
 
@@ -147,6 +153,7 @@ export function RefineTextureTab() {
       });
 
       const poller = getPoller();
+      refinePollerRef.current = poller;
       const result = await poller.pollUntilDone(newTaskId, {
         onProgress: (task) => {
           setRefineProgress(task.progress);
@@ -175,12 +182,17 @@ export function RefineTextureTab() {
       await importTaskToAe(result, 'Refined Model');
       setRefineStatus(t('statusSuccess'));
     } catch (err: any) {
+      if (err instanceof CancelledError) {
+        // User cancelled — do not treat as error
+        return;
+      }
       setRefineError(err.message || t('statusFailed'));
       if (refineIdxRef.current >= 0) {
         updatePipelineStep(refineIdxRef.current, { status: 'failed' });
       }
     } finally {
       setIsRefining(false);
+      refinePollerRef.current = null;
     }
   }, [selectedStepIdx, modelSteps, getApi, getPoller, addPipelineStep, updatePipelineStep, pipeline, importTaskToAe, t]);
 
@@ -189,6 +201,19 @@ export function RefineTextureTab() {
     const taskId = getModelTaskId(texModelStepIdx);
     if (!taskId) {
       setTexError(t('selectModelWarning'));
+      return;
+    }
+
+    if (texInputMode === 'text' && !texPrompt.trim()) {
+      setTexError(t('enterPromptWarning') || 'Please enter a texture prompt');
+      return;
+    }
+    if (texInputMode === 'image' && !texImageToken) {
+      setTexError(t('uploadImageWarning') || 'Please upload an image');
+      return;
+    }
+    if (texInputMode === 'style_image' && !texStyleToken) {
+      setTexError(t('uploadStyleWarning') || 'Please upload a style image');
       return;
     }
 
@@ -227,6 +252,7 @@ export function RefineTextureTab() {
         status: 'pending',
         params: req,
       };
+      nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
       addPipelineStep(step);
       texIdxRef.current = nextStepIdx.current++;
 
@@ -237,6 +263,7 @@ export function RefineTextureTab() {
       });
 
       const poller = getPoller();
+      texPollerRef.current = poller;
       const result = await poller.pollUntilDone(newTaskId, {
         onProgress: (task) => {
           setTexProgress(task.progress);
@@ -265,12 +292,17 @@ export function RefineTextureTab() {
       await importTaskToAe(result, 'Textured Model');
       setTexStatus(t('statusSuccess'));
     } catch (err: any) {
+      if (err instanceof CancelledError) {
+        // User cancelled — do not treat as error
+        return;
+      }
       setTexError(err.message || t('statusFailed'));
       if (texIdxRef.current >= 0) {
         updatePipelineStep(texIdxRef.current, { status: 'failed' });
       }
     } finally {
       setIsTexturing(false);
+      texPollerRef.current = null;
     }
   }, [texModelStepIdx, texInputMode, texPrompt, texImageToken, texStyleToken,
     texQuality, texPbr, texAlignment, texBake, texPartNames,
@@ -306,7 +338,27 @@ export function RefineTextureTab() {
           {isRefining ? t('refiningStatus') : t('refineBtn')}
         </button>
         {refineError && <div style={styles.error}>{refineError}</div>}
-        {isRefining && <ProgressBar progress={refineProgress} status={refineStatus} />}
+        {isRefining && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <ProgressBar progress={refineProgress} status={refineStatus} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  if (refinePollerRef.current) {
+                    refinePollerRef.current.abort();
+                    refinePollerRef.current = null;
+                  }
+                  setIsRefining(false);
+                  setRefineProgress(0);
+                  setRefineStatus('');
+                }}
+                style={styles.cancelBtn}
+              >
+                {t('cancelBtn')}
+              </button>
+            </div>
+          </div>
+        )}
         {refineResult && (
           <div style={styles.resultBox}>
             <span style={styles.resultLabel}>{t('refinedReady')}</span>
@@ -409,13 +461,36 @@ export function RefineTextureTab() {
 
         <button
           onClick={handleTexture}
-          disabled={isTexturing || !apiKey || texModelStepIdx < 0}
+          disabled={isTexturing || !apiKey || texModelStepIdx < 0 ||
+            (texInputMode === 'text' && !texPrompt.trim()) ||
+            (texInputMode === 'image' && !texImageToken) ||
+            (texInputMode === 'style_image' && !texStyleToken)}
           style={styles.actionBtn}
         >
           {isTexturing ? t('texturingStatus') : t('applyTextureBtn')}
         </button>
         {texError && <div style={styles.error}>{texError}</div>}
-        {isTexturing && <ProgressBar progress={texProgress} status={texStatus} />}
+        {isTexturing && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <ProgressBar progress={texProgress} status={texStatus} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  if (texPollerRef.current) {
+                    texPollerRef.current.abort();
+                    texPollerRef.current = null;
+                  }
+                  setIsTexturing(false);
+                  setTexProgress(0);
+                  setTexStatus('');
+                }}
+                style={styles.cancelBtn}
+              >
+                {t('cancelBtn')}
+              </button>
+            </div>
+          </div>
+        )}
         {texResult && (
           <div style={styles.resultBox}>
             <span style={styles.resultLabel}>{t('texturedReady')}</span>
@@ -559,5 +634,14 @@ const styles: Record<string, React.CSSProperties> = {
     objectFit: 'contain' as const,
     borderRadius: 4,
     border: '1px solid #444',
+  },
+  cancelBtn: {
+    padding: '3px 8px',
+    border: '1px solid #662222',
+    borderRadius: 3,
+    backgroundColor: '#3a1a1a',
+    color: '#ff6b6b',
+    fontSize: 9,
+    cursor: 'pointer',
   },
 };

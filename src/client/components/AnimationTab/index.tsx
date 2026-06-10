@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
-import { TaskPoller } from '../../services/taskPoller';
+import { TaskPoller, CancelledError } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
 import { useTranslation } from '../../hooks/useTranslation';
 import {
@@ -135,8 +135,9 @@ export function AnimationTab() {
   const { t } = useTranslation();
 
   const importedTaskIds = useRef(new Set<string>());
+  const pollerRef = useRef<TaskPoller | null>(null);
 
-  const importTaskToAe = useCallback(async (task: TripoTask, label: string) => {
+  const importTaskToAe = useCallback(async (task: TripoTask, label: string, formatOverride?: string) => {
     if (importedTaskIds.current.has(task.task_id)) return;
     importedTaskIds.current.add(task.task_id);
     setIsRunning(true);
@@ -144,7 +145,7 @@ export function AnimationTab() {
     setTaskStatus(t('statusDownloading'));
     try {
       const api = new TripoApiService(apiKey!);
-      const modelUrl = api.getModelUrl(task.output);
+      const modelUrl = api.getModelUrl(task.output ?? {});
       if (!modelUrl) return;
 
       const saveDir = TripoApiService.getModelSaveDir();
@@ -174,6 +175,15 @@ export function AnimationTab() {
       setTaskProgress(100);
       setTaskStatus(t('statusSuccess'));
 
+      // Derive format from file extension or caller-provided override
+      let format: string;
+      if (formatOverride) {
+        format = formatOverride;
+      } else {
+        const ext = localPath.split('.').pop()?.toUpperCase();
+        format = (ext === 'FBX' || ext === 'OBJ' || ext === 'GLTF') ? ext : 'GLB';
+      }
+
       // Refresh credit balance
       try {
         const balRes = await api.getBalance();
@@ -186,9 +196,9 @@ export function AnimationTab() {
         name: label,
         thumbnailUrl: task.output?.rendered_image,
         modelPath: localPath,
-        format: 'GLB',
+        format,
         createdAt: Date.now(),
-        pipelineSteps: [...pipeline],
+        pipelineSteps: [...useStore.getState().pipeline],
       };
       addModel(model);
     } catch (err: any) {
@@ -196,7 +206,7 @@ export function AnimationTab() {
     } finally {
       setIsRunning(false);
     }
-  }, [apiKey, csInterface, addModel, pipeline, setBalance, t]);
+  }, [apiKey, csInterface, addModel, setBalance, t]);
 
   // Common state
   const modelSteps = pipeline.filter((s) => s.status === 'success' && s.taskId);
@@ -234,6 +244,7 @@ export function AnimationTab() {
         status: 'pending',
         params: params as any,
       };
+      nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
       addPipelineStep(step);
       taskIdxRef.current = nextStepIdx.current++;
 
@@ -244,6 +255,7 @@ export function AnimationTab() {
       });
 
       const poller = new TaskPoller({ getTask: (id) => api.getTask(id) });
+      pollerRef.current = poller;
       const result = await poller.pollUntilDone(taskId, {
         onProgress: (task) => {
           setTaskProgress(task.progress);
@@ -274,6 +286,10 @@ export function AnimationTab() {
       } catch {}
       return result;
     } catch (err: any) {
+      if (err instanceof CancelledError) {
+        // User cancelled — do not treat as error, do not update pipeline as failed
+        return null;
+      }
       setError(err.message || t('statusFailed'));
       if (taskIdxRef.current >= 0) {
         updatePipelineStep(taskIdxRef.current, { status: 'failed' });
@@ -281,6 +297,7 @@ export function AnimationTab() {
       return null;
     } finally {
       setIsRunning(false);
+      pollerRef.current = null;
     }
   }, [apiKey, getApi, addPipelineStep, updatePipelineStep, setBalance, t]);
 
@@ -311,7 +328,7 @@ export function AnimationTab() {
     });
     if (result) {
       setTaskStatus(t('statusImportingAE'));
-      await importTaskToAe(result, `Rigged (${rigType})`);
+      await importTaskToAe(result, `Rigged (${rigType})`, rigOutFormat.toUpperCase() === 'FBX' ? 'FBX' : 'GLB');
       setTaskStatus(t('statusSuccess'));
     }
   }, [modelStepIdx, modelSteps, rigType, rigOutFormat, rigSpec, runTask, importTaskToAe, t]);
@@ -329,9 +346,27 @@ export function AnimationTab() {
   }, []);
 
   const handleRetarget = useCallback(async () => {
-    const taskId = modelSteps[modelStepIdx]?.taskId;
-    if (!taskId) { setError(t('selectModelError')); return; }
+    const selectedModelTaskId = modelSteps[modelStepIdx]?.taskId;
+    if (!selectedModelTaskId) { setError(t('selectModelError')); return; }
     if (selectedAnims.length === 0) { setError(t('selectAnimError')); return; }
+
+    // For retarget to work, we need the rig output task ID, not the raw source model.
+    // Find the most recent animate_rig step with status 'success' based on the selected model.
+    let taskId: string = selectedModelTaskId;
+    const fullPipeline = useStore.getState().pipeline;
+    for (let i = fullPipeline.length - 1; i >= 0; i--) {
+      const step = fullPipeline[i];
+      if (
+        step.type === 'animate_rig' &&
+        step.status === 'success' &&
+        step.taskId &&
+        (step.params as any)?.original_model_task_id === selectedModelTaskId
+      ) {
+        taskId = step.taskId;
+        break;
+      }
+    }
+
     const result = await runTask('animate_retarget', {
       type: 'animate_retarget',
       original_model_task_id: taskId,
@@ -810,6 +845,10 @@ export function AnimationTab() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
             <button
               onClick={() => {
+                if (pollerRef.current) {
+                  pollerRef.current.abort();
+                  pollerRef.current = null;
+                }
                 setIsRunning(false);
                 setTaskProgress(0);
                 setTaskStatus('');
@@ -969,7 +1008,7 @@ export function AnimationTab() {
         <div style={styles.sectionTitle}>{t('advancedPbrHeader')}</div>
         <p style={styles.hint}>{t('materialPresetHint')}</p>
         <div style={styles.presetRow}>
-          {MATERIAL_PRESETS.filter((p) => p.value !== 'default').map((p) => (
+          {MATERIAL_PRESETS.map((p) => (
             <button
               key={p.value}
               onClick={() => setMatPreset(p.value as MaterialPresetName)}

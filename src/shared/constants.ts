@@ -126,15 +126,15 @@ export const LOOP_TYPES: { value: LoopType; label: string }[] = [
 ];
 
 // AE 2026 Material Presets (Adobe Standard Material)
-export const MATERIAL_PRESETS: { value: string; label: string; material: import('./types').MaterialProperties }[] = [
-  { value: 'default', label: 'Default', material: {} },
-  { value: 'metallic', label: 'Metallic', material: { metal: 1, reflectionIntensity: 80, reflectionSharpness: 90, diffuse: 30, specularIntensity: 80 } },
-  { value: 'glass', label: 'Glass', material: { transparency: 80, indexOrRefraction: 1.5, reflectionIntensity: 30, specularIntensity: 90, lightTransmission: 90 } },
-  { value: 'plastic', label: 'Plastic', material: { metal: 0, diffuse: 80, specularIntensity: 40, specularShininess: 30 } },
-  { value: 'rubber', label: 'Rubber', material: { metal: 0, diffuse: 90, specularIntensity: 10, specularShininess: 5 } },
-  { value: 'ceramic', label: 'Ceramic', material: { metal: 0, diffuse: 70, specularIntensity: 60, specularShininess: 80, reflectionIntensity: 20 } },
-  { value: 'gold', label: 'Gold', material: { metal: 1, ambient: 50, diffuse: 60, reflectionIntensity: 90, reflectionSharpness: 70, specularIntensity: 70 } },
-  { value: 'clay', label: 'Clay', material: { metal: 0, diffuse: 90, specularIntensity: 5, ambient: 20 } },
+export const MATERIAL_PRESETS: { value: import('./types').MaterialPresetName; label: string; material: import('./types').MaterialProperties }[] = [
+  { value: 'plastic', label: 'Plastic', material: { metal: 0, diffuse: 80, specularIntensity: 50, ambient: 0, specularShininess: 10, reflectionIntensity: 5, transparency: 0 } },
+  { value: 'metal', label: 'Metal', material: { metal: 100, diffuse: 40, specularIntensity: 90, specularShininess: 80, ambient: 0, reflectionIntensity: 80, reflectionSharpness: 90, transparency: 0 } },
+  { value: 'glass', label: 'Glass', material: { ambient: 0, diffuse: 10, specularIntensity: 90, specularShininess: 90, metal: 0, reflectionIntensity: 50, transparency: 85, transparencyRolloff: 50, indexOrRefraction: 1.5, lightTransmission: 90 } },
+  { value: 'gold', label: 'Gold', material: { ambient: 0, diffuse: 50, specularIntensity: 95, specularShininess: 85, metal: 100, reflectionIntensity: 90, reflectionSharpness: 95, reflectionRolloff: 80, transparency: 0 } },
+  { value: 'matte', label: 'Matte', material: { ambient: 10, diffuse: 90, specularIntensity: 0, specularShininess: 0, metal: 0, reflectionIntensity: 0, transparency: 0 } },
+  { value: 'ceramic', label: 'Ceramic', material: { ambient: 0, diffuse: 70, specularIntensity: 60, specularShininess: 40, metal: 0, reflectionIntensity: 30, reflectionSharpness: 70, transparency: 0 } },
+  { value: 'rubber', label: 'Rubber', material: { ambient: 0, diffuse: 90, specularIntensity: 15, specularShininess: 5, metal: 0, reflectionIntensity: 2, transparency: 0 } },
+  { value: 'crystal', label: 'Crystal', material: { ambient: 0, diffuse: 5, specularIntensity: 100, specularShininess: 95, metal: 0, reflectionIntensity: 60, reflectionSharpness: 95, transparency: 90, transparencyRolloff: 30, indexOrRefraction: 2.0, lightTransmission: 95 } },
 ];
 
 export const MODEL_SAVE_DIR = 'Tripo4AE/Models';

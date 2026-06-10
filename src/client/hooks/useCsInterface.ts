@@ -4,9 +4,7 @@ import type { CompInfo, AnimationConfig, MaterialProperties, ImportConfig, Envir
 import CSInterface from '../../js/lib/cep/csinterface';
 
 function escapeForEval(str: string): string {
-  return str
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'");
+  return str.replace(/'/g, "\\'");
 }
 
 let csInstance: any = null;
@@ -57,15 +55,18 @@ export function useCsInterface() {
     const callId = Math.random().toString(36).slice(2, 8);
     console.log(`[Tripo4AE] evalScript[${callId}]`, script.substring(0, 120) + (script.length > 120 ? '...' : ''));
     return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error('evalScript timeout after 30s'));
+      }, 30000);
       cs.evalScript(script, (result: string) => {
+        clearTimeout(timer);
         if (result === 'EvalScript error.' || result === 'EvalScript error') {
           console.error(`[Tripo4AE] evalScript[${callId}] EvalScript error — function not found or syntax error`);
           reject(new Error('ExtendScript evaluation failed. The JSX host script may not be loaded. Try restarting AE.'));
           return;
         }
-        if (result === 'undefined' || result === undefined || result === null || result === '') {
-          console.error(`[Tripo4AE] evalScript[${callId}] returned empty/undefined — ExtendScript function may not exist or threw`);
-          reject(new Error('ExtendScript returned no result. The function may not be registered. Try restarting AE.'));
+        if (result === undefined || result === null || result === '') {
+          resolve(null as T);
           return;
         }
         console.log(`[Tripo4AE] evalScript[${callId}] OK:`, result.substring(0, 200));
@@ -95,7 +96,7 @@ export function useCsInterface() {
   const importModel = useCallback(
     (filePath: string, config?: ImportConfig): Promise<any> => {
       if (config) {
-        const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const json = JSON.stringify(config).replace(/'/g, "\\'");
         return evalScript(`tripo4ae.importModel('${escapeForEval(filePath)}', '${json}')`);
       }
       return evalScript(`tripo4ae.importModel('${escapeForEval(filePath)}')`);
@@ -105,7 +106,7 @@ export function useCsInterface() {
 
   const applyAnimation = useCallback(
     (config: AnimationConfig): Promise<any> => {
-      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const json = JSON.stringify(config).replace(/'/g, "\\'");
       return evalScript(`tripo4ae.applyAnimation('${json}')`);
     },
     [evalScript],
@@ -113,7 +114,7 @@ export function useCsInterface() {
 
   const selectEmbeddedAnimation = useCallback(
     (config: EmbeddedAnimationConfig): Promise<any> => {
-      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const json = JSON.stringify(config).replace(/'/g, "\\'");
       return evalScript(`tripo4ae.selectEmbeddedAnimation('${json}')`);
     },
     [evalScript],
@@ -121,7 +122,7 @@ export function useCsInterface() {
 
   const createCamera = useCallback(
     (config: any): Promise<any> => {
-      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const json = JSON.stringify(config).replace(/'/g, "\\'");
       return evalScript(`tripo4ae.createCamera('${json}')`);
     },
     [evalScript],
@@ -129,7 +130,7 @@ export function useCsInterface() {
 
   const createLights = useCallback(
     (config: any): Promise<any> => {
-      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const json = JSON.stringify(config).replace(/'/g, "\\'");
       return evalScript(`tripo4ae.createLights('${json}')`);
     },
     [evalScript],
@@ -143,7 +144,7 @@ export function useCsInterface() {
 
   const setMaterialProperties = useCallback(
     (config: { layerIndex?: number; material: MaterialProperties }): Promise<any> => {
-      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const json = JSON.stringify(config).replace(/'/g, "\\'");
       return evalScript(`tripo4ae.setMaterialProperties('${json}')`);
     },
     [evalScript],
@@ -162,7 +163,7 @@ export function useCsInterface() {
   const createEnvironmentLight = useCallback(
     (config?: EnvironmentLightConfig): Promise<any> => {
       if (config) {
-        const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const json = JSON.stringify(config).replace(/'/g, "\\'");
         return evalScript(`tripo4ae.createEnvironmentLight('${json}')`);
       }
       return evalScript('tripo4ae.createEnvironmentLight()');
@@ -172,7 +173,7 @@ export function useCsInterface() {
 
   const applyMaterialPreset = useCallback(
     (config: { layerIndex?: number; preset: string; overrides?: Record<string, number> }): Promise<any> => {
-      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const json = JSON.stringify(config).replace(/'/g, "\\'");
       return evalScript(`tripo4ae.applyMaterialPreset('${json}')`);
     },
     [evalScript],
@@ -186,7 +187,7 @@ export function useCsInterface() {
   const setupScene = useCallback(
     (config?: Record<string, any>): Promise<any> => {
       if (config) {
-        const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const json = JSON.stringify(config).replace(/'/g, "\\'");
         return evalScript(`tripo4ae.setupScene('${json}')`);
       }
       return evalScript('tripo4ae.setupScene()');
@@ -196,7 +197,7 @@ export function useCsInterface() {
 
   const createParametricMesh = useCallback(
     (config: { meshType: string; color?: number[]; materialPreset?: string; curvature?: number; segments?: number; extrusionDepth?: number; bevelDepth?: number }): Promise<any> => {
-      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const json = JSON.stringify(config).replace(/'/g, "\\'");
       return evalScript(`tripo4ae.createParametricMesh('${json}')`);
     },
     [evalScript],

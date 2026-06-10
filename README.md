@@ -390,4 +390,13 @@ Sets up a native HDRI environment light layer.
 
 ## License
 
-Private project. All rights reserved.
+[MIT](LICENSE) © 2025-2026 hexxyan
+
+## Related Resources
+
+- [Tripo AI Platform](https://platform.tripo3d.ai/) — Get API Key & documentation
+- [Tripo OpenAPI v2 Docs](https://api.tripo3d.ai/v2/openapi) — API reference
+- [Bolt CEP](https://github.com/hyperbrew/bolt-cep) — CEP extension scaffolding
+- [AE ExtendScript API Reference](https://ae-scripting.docsforadobe.dev/) — ExtendScript documentation
+- [Adobe CEP Cookbook](https://github.com/Adobe-CEP/CEP-Resources) — CEP development guide
+- [types-for-adobe](https://github.com/aenhancers/types-for-adobe) — AE ExtendScript type definitions

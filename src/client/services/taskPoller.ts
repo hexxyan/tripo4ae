@@ -10,14 +10,31 @@ export interface PollOptions {
   onProgress?: (task: TripoTask) => void;
 }
 
+export class CancelledError extends Error {
+  constructor(message = 'Task polling was cancelled') {
+    super(message);
+    this.name = 'CancelledError';
+  }
+}
+
 export class TaskPoller {
   private api: { getTask: (id: string) => Promise<TripoTask> };
+  private _aborted = false;
 
   constructor(api: { getTask: (id: string) => Promise<TripoTask> }) {
     this.api = api;
   }
 
+  abort(): void {
+    this._aborted = true;
+  }
+
+  get aborted(): boolean {
+    return this._aborted;
+  }
+
   async pollUntilDone(taskId: string, options?: PollOptions): Promise<TripoTask> {
+    this._aborted = false;
     const defaultInterval = options?.interval ?? 2000;
     const maxInterval = options?.maxInterval ?? 5000;
     const timeout = options?.timeout ?? 300000;
@@ -28,6 +45,10 @@ export class TaskPoller {
     let attempts = 0;
 
     while (attempts < maxAttempts) {
+      if (this._aborted) {
+        throw new CancelledError(`Polling cancelled for task ${taskId}`);
+      }
+
       const elapsed = Date.now() - startTime;
       if (elapsed >= timeout) {
         throw new Error(`Polling timed out after ${timeout}ms`);
@@ -35,6 +56,10 @@ export class TaskPoller {
 
       const task = await this.api.getTask(taskId);
       attempts++;
+
+      if (this._aborted) {
+        throw new CancelledError(`Polling cancelled for task ${taskId}`);
+      }
 
       if (TERMINAL_STATUSES.includes(task.status)) {
         if (task.status === 'success') {
@@ -58,6 +83,11 @@ export class TaskPoller {
 
       // Wait before next poll
       await this.delay(nextInterval);
+
+      // Check after delay — the most common time for abort to fire
+      if (this._aborted) {
+        throw new CancelledError(`Polling cancelled for task ${taskId}`);
+      }
     }
 
     throw new Error(`Max attempts (${maxAttempts}) exceeded while polling task ${taskId}`);

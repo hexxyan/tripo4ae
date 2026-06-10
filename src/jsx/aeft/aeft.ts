@@ -91,6 +91,11 @@ var FALLOFF_SMOOTH = 1;
 var FALLOFF_INVERSE = 2;
 var FALLOFF_INVERSE_SQUARED = 3;
 
+// Light type enum values
+var LIGHT_TYPE_POINT = 2;
+var LIGHT_TYPE_AMBIENT = 3;
+var LIGHT_TYPE_ENVIRONMENT = 4;
+
 // --- Material presets (PBR SOP) ---
 var MATERIAL_PRESETS: any = {
   plastic: { ambient: 0, diffuse: 80, specularIntensity: 50, specularShininess: 10, metal: 0, reflectionIntensity: 5, transparency: 0 },
@@ -169,8 +174,8 @@ function ensureAdvanced3DRenderer(comp: any): boolean {
 // --- Expression generators ---
 
 function getSpinExpression(axis: string, speed: number): string {
-  var axisProp = axis === "x" ? "X Rotation" : axis === "y" ? "Y Rotation" : "Z Rotation";
-  return "// Tripo4AE Spin Expression\nvar spd = " + speed + ";\n" + axisProp + " = time * spd * 360;";
+  var axisProp = axis === "x" ? "xRotation" : axis === "y" ? "yRotation" : "zRotation";
+  return "// Tripo4AE Spin Expression\nvar spd = " + speed + ";\ntransform." + axisProp + " = time * spd * 360;";
 }
 
 function getFloatExpression(axis: string, amplitude: number, frequency: number): string {
@@ -242,7 +247,10 @@ export function importModel(modelPath: string, configJson?: string): string {
 
     var config: any = { autoScale: true, centerInComp: true, enableTimeRemap: true };
     if (configJson) {
-      try { config = JSON.parse(configJson); } catch (e) {}
+      try { config = JSON.parse(configJson); } catch (e) {
+        app.endUndoGroup();
+        return JSON.stringify({ ok: false, error: "Invalid config JSON: " + String(e) });
+      }
     }
 
     var io = new ImportOptions(file);
@@ -320,6 +328,19 @@ export function importModel(modelPath: string, configJson?: string): string {
           if (nameProp) nameProp.setValue(config.selectEmbeddedAnim);
         }
       } catch (e) {}
+
+      // Wait briefly for AE to load animation data
+      $.sleep(500);
+    }
+
+    // Loop the embedded animation via time remap expression
+    if (config.loopAnimation && layer.timeRemapEnabled) {
+      try {
+        var timeRemap = layer.property("Time Remap");
+        if (timeRemap && timeRemap.numKeys >= 2) {
+          timeRemap.expression = "loopOut('cycle');";
+        }
+      } catch (e) {}
     }
 
     app.endUndoGroup();
@@ -391,8 +412,31 @@ export function applyAnimation(configJson: string): string {
           var position = layer.property("Position");
           if (position) {
             var endPos = position.value;
-            setKeyframe(position, startTime, [-200, endPos[1]], undefined, ease.outEase);
+            var startPos = endPos.length >= 3 ? [-200, endPos[1], endPos[2]] : [-200, endPos[1]];
+            setKeyframe(position, startTime, startPos, undefined, ease.outEase);
             setKeyframe(position, startTime + duration, endPos, ease.inEase, undefined);
+          }
+          break;
+        }
+        case "elastic-pop": {
+          var scaleEp = layer.property("Scale");
+          if (scaleEp) {
+            // Remove all existing scale keyframes
+            while (scaleEp.numKeys > 0) scaleEp.removeKey(1);
+            setKeyframe(scaleEp, startTime, [0, 0]);
+            setKeyframe(scaleEp, startTime + 0.5, [100, 100]);
+            // Apply elastic bounce expression on scale
+            scaleEp.expression =
+              "// Tripo4AE Elastic Pop Expression\n" +
+              "var t = time - inPoint;\n" +
+              "var dur = 0.5;\n" +
+              "if (t < dur) {\n" +
+              "  var progress = t / dur;\n" +
+              "  var bounce = Math.sin(progress * Math.PI * 3) * (1 - progress) * 30;\n" +
+              "  [100 + bounce, 100 + bounce];\n" +
+              "} else {\n" +
+              "  [100, 100];\n" +
+              "}";
           }
           break;
         }
@@ -410,7 +454,7 @@ export function applyAnimation(configJson: string): string {
           case "spin": {
             var axis = loop.axis || "y";
             var prop = axis === "x" ? "X Rotation" : axis === "y" ? "Y Rotation" : "Z Rotation";
-            var rotProp = layer.property(prop);
+            var rotProp = layer.property(prop) || layer.property("ADBE Rotate X") || layer.property("ADBE Rotate Y") || layer.property("ADBE Rotate Z");
             if (rotProp) rotProp.expression = expr;
             break;
           }
@@ -476,15 +520,8 @@ export function selectEmbeddedAnimation(configJson: string): string {
     // Loop the embedded animation via time remap expression
     if (config.loopAnimation && layer.timeRemapEnabled) {
       var timeRemap = layer.property("Time Remap");
-      if (timeRemap) {
-        var duration = timeRemap.keyValue(2) - timeRemap.keyValue(1);
-        var startVal = timeRemap.keyValue(1);
-        timeRemap.expression =
-          "// Tripo4AE Embedded Animation Loop\n" +
-          "var duration = " + duration + ";\n" +
-          "var start = " + startVal + ";\n" +
-          "var t = (time - inPoint) % duration;\n" +
-          "start + t;";
+      if (timeRemap && timeRemap.numKeys >= 2) {
+        timeRemap.expression = "loopOut('cycle');";
       }
     }
 
@@ -729,6 +766,7 @@ export function createLights(configJson: string): string {
       var ld = lightsData[i];
       var layer = comp.layers.addLight(ld.name, [ld.x, ld.y]);
       layer.threeDLayer = true;
+      try { layer.lightType = LIGHT_TYPE_POINT; } catch (e) {}
       layer.property("Position").setValue([ld.x, ld.y, ld.z]);
       layer.property("Intensity").setValue(ld.intensity);
       layer.property("Color").setValue(color);
@@ -954,10 +992,16 @@ export function createEnvironmentLight(configJson?: string): string {
     }
 
     if (config.castShadows !== undefined) {
-      try { lightLayer.property("Casts Shadows").setValue(config.castShadows ? 1 : 0); } catch (e) {}
+      try {
+        var envLightGroup = lightLayer.property(LIGHT_GROUP);
+        if (envLightGroup) envLightGroup.property(LIGHT_MAP.castsShadows).setValue(config.castShadows ? 1 : 0);
+      } catch (e) {}
     }
     if (config.shadowDarkness !== undefined) {
-      try { lightLayer.property("Shadow Darkness").setValue(config.shadowDarkness); } catch (e) {}
+      try {
+        var envLightGroup2 = lightLayer.property(LIGHT_GROUP);
+        if (envLightGroup2) envLightGroup2.property(LIGHT_MAP.shadowDarkness).setValue(config.shadowDarkness);
+      } catch (e) {}
     }
 
     return JSON.stringify({
@@ -1102,7 +1146,7 @@ export function setupScene(configJson?: string): string {
       var lightGroup = lightLayer.property(LIGHT_GROUP);
       if (lightGroup) {
         try { lightGroup.property(LIGHT_MAP.falloffType).setValue(FALLOFF_SMOOTH); } catch (e) {}
-        try { lightGroup.property(LIGHT_MAP.falloffType).setValue(FALLOFF_SMOOTH); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.falloffStart).setValue(0); } catch (e) {}
         try { lightGroup.property(LIGHT_MAP.falloffDistance).setValue(dist * 2); } catch (e) {}
         try { lightGroup.property(LIGHT_MAP.castsShadows).setValue(1); } catch (e) {}
         try { lightGroup.property(LIGHT_MAP.shadowDarkness).setValue(80); } catch (e) {}

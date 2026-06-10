@@ -25,7 +25,8 @@ export class TripoApiService {
     this.client = new TripoHttpClient(apiKey);
   }
 
-  getModelUrl(output: { pbr_model?: string; model?: string; base_model?: string }): string | null {
+  getModelUrl(output?: { pbr_model?: string; model?: string; base_model?: string } | null): string | null {
+    if (!output) return null;
     if (output.pbr_model) return output.pbr_model;
     if (output.model) return output.model;
     if (output.base_model) return output.base_model;
@@ -99,6 +100,7 @@ export class TripoApiService {
                 if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                   const redirectUrl = new URL(res.headers.location, targetUrl).toString();
                   console.log(`[Tripo4AE] Redirect ${res.statusCode} -> ${redirectUrl}`);
+                  res.resume(); // Drain response body to prevent socket leak
                   resolve(downloadWithNode(redirectUrl, redirectCount + 1));
                   return;
                 }
@@ -204,7 +206,11 @@ export class TripoApiService {
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    fs.writeFileSync(savePath, buffer);
+    if (fs) {
+      fs.writeFileSync(savePath, buffer);
+    } else {
+      throw new Error('Cannot save file: Node.js fs not available');
+    }
     return savePath;
   }
 
@@ -257,12 +263,14 @@ export class TripoApiService {
       }
       const fileBuffer = fs.readFileSync(fileOrPath);
       fileName = nodePath.basename(fileOrPath);
-      blob = new Blob([fileBuffer]);
+      const ext = fileName.split('.').pop()?.toLowerCase();
+      const mimeMap: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+      blob = new Blob([fileBuffer], { type: mimeMap[ext || ''] || 'image/jpeg' });
     } else {
       // File object from drag-drop / file input
       fileName = fileOrPath.name;
       const arrayBuffer = await fileOrPath.arrayBuffer();
-      blob = new Blob([arrayBuffer]);
+      blob = new Blob([arrayBuffer], { type: fileOrPath.type || 'image/jpeg' });
     }
 
     const formData = new FormData();

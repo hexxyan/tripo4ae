@@ -346,6 +346,16 @@ export const translations = {
     advancedPbrHint: 'Expand to micro-tune Ambient, Metal, Transmission, IOR, etc.',
     rigSpecLabel: 'Spec',
     cancelBtn: 'Cancel',
+    enterPromptWarning: 'Please enter a texture prompt',
+    uploadImageWarning: 'Please upload an image',
+    uploadStyleWarning: 'Please upload a style image',
+
+    // GenerateTab error strings
+    imageUploadFailed: 'Image upload failed',
+    importFailed: 'Import failed',
+    uploading: 'Uploading...',
+    mvGenerateRequiresSource: 'Multiview image generation requires a source image',
+    mvEditRequiresTask: 'Multiview image editing requires an existing task',
   },
   zh: {
     // Tabs & Header
@@ -701,6 +711,16 @@ export const translations = {
     advancedPbrHint: '展开滑块，以微调材质的环境光反射、金属度、折射率等物理细节。',
     rigSpecLabel: '骨骼命名规范',
     cancelBtn: '取消',
+    enterPromptWarning: '请输入纹理描述词',
+    uploadImageWarning: '请上传一张图片',
+    uploadStyleWarning: '请上传一张风格参考图',
+
+    // GenerateTab error strings
+    imageUploadFailed: '图片上传失败',
+    importFailed: '导入失败',
+    uploading: '上传中...',
+    mvGenerateRequiresSource: '多视图生成需要上传源图片',
+    mvEditRequiresTask: '多视图编辑需要已有任务',
   }
 };
 

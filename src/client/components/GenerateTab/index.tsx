@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
-import { TaskPoller } from '../../services/taskPoller';
+import { TaskPoller, CancelledError } from '../../services/taskPoller';
 import { useCsInterface } from '../../hooks/useCsInterface';
 import { GENERATE_STYLES, IMPORT_WORKFLOWS } from '../../../shared/constants';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -70,10 +70,12 @@ export function GenerateTab() {
   // Image mode state
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageToken, setImageToken] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // Multiview mode state
   const [mvFiles, setMvFiles] = useState<(File | null)[]>([null, null, null, null]);
   const [mvTokens, setMvTokens] = useState<(string | null)[]>([null, null, null, null]);
+  const [uploadingMvCount, setUploadingMvCount] = useState(0);
 
   // Generation params
   const [params, setParams] = useState({
@@ -102,8 +104,13 @@ export function GenerateTab() {
   const resumedTaskRef = useRef<string | null>(null);
   const recoveringTaskRef = useRef<string | null>(null);
   const attemptedImportsRef = useRef<Set<string>>(new Set());
+  const pollerRef = useRef<TaskPoller | null>(null);
 
   const handleCancel = useCallback(() => {
+    if (pollerRef.current) {
+      pollerRef.current.abort();
+      pollerRef.current = null;
+    }
     setIsGenerating(false);
     setIsImporting(false);
     setProgress(0);
@@ -157,6 +164,7 @@ export function GenerateTab() {
           params: convertReq,
           workflow,
         };
+        nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
         const convertStepIndex = nextStepIdx.current++;
         addPipelineStep(convertStep);
         setStatusText(t('statusConverting'));
@@ -167,24 +175,32 @@ export function GenerateTab() {
           workflow,
         });
         const convertPoller = getPoller();
-        taskToDownload = await convertPoller.pollUntilDone(convertTaskId, {
-          interval: 2000,
-          maxInterval: 5000,
-          timeout: 15 * 60 * 1000,
-          onProgress: (progressTask) => {
-            setStatusText(`${t('statusConverting')} ${progressTask.progress}%`);
-            updatePipelineStep(convertStepIndex, {
-              status: progressTask.status,
-              output: progressTask.output,
-              workflow,
-            });
-          },
-        });
-        updatePipelineStep(convertStepIndex, {
-          status: 'success',
-          output: taskToDownload.output,
-          workflow,
-        });
+        try {
+          taskToDownload = await convertPoller.pollUntilDone(convertTaskId, {
+            interval: 2000,
+            maxInterval: 5000,
+            timeout: 15 * 60 * 1000,
+            onProgress: (progressTask) => {
+              setStatusText(`${t('statusConverting')} ${progressTask.progress}%`);
+              updatePipelineStep(convertStepIndex, {
+                status: progressTask.status,
+                output: progressTask.output,
+                workflow,
+              });
+            },
+          });
+          updatePipelineStep(convertStepIndex, {
+            status: 'success',
+            output: taskToDownload.output,
+            workflow,
+          });
+        } catch (convertErr) {
+          updatePipelineStep(convertStepIndex, {
+            status: 'failed',
+            workflow,
+          });
+          throw convertErr;
+        }
         format = 'OBJ';
       } else if (workflow === 'project_only') {
         format = 'GLB';
@@ -217,7 +233,7 @@ export function GenerateTab() {
         taskId: task.task_id,
         name: existingModel?.name || getTaskPrompt(task),
         prompt: getTaskPrompt(task),
-        thumbnailUrl: task.output.rendered_image,
+        thumbnailUrl: task.output?.rendered_image,
         modelPath: localPath,
         format,
         workflow,
@@ -267,6 +283,7 @@ export function GenerateTab() {
 
     try {
       const poller = getPoller();
+      pollerRef.current = poller;
       const result = await poller.pollUntilDone(taskId, {
         interval: 2000,
         maxInterval: 5000,
@@ -310,11 +327,16 @@ export function GenerateTab() {
         }
       }
     } catch (err: any) {
+      if (err instanceof CancelledError) {
+        // User cancelled — do not treat as error, do not update pipeline as failed
+        return;
+      }
       setError(err.message || t('statusFailed'));
       setStatusText(t('statusFailed'));
       updatePipelineStep(pipelineIndex, { status: 'failed' });
     } finally {
       setIsGenerating(false);
+      pollerRef.current = null;
       if (resumedTaskRef.current === taskId) {
         resumedTaskRef.current = null;
       }
@@ -380,18 +402,26 @@ export function GenerateTab() {
     recoveringTaskRef.current = taskId;
     setCurrentTaskId(taskId);
     setStatusText(t('importing'));
+    let cancelled = false;
     void (async () => {
       try {
+        if (cancelled) return;
         const task = await getApi().getTask(taskId);
+        if (cancelled) return;
         setResultTask(task);
         await importTaskWithWorkflow(task, step.workflow || importWorkflow, index);
       } catch (recoverErr: any) {
-        setError(`${t('recoveryFailed')}: ${recoverErr.message || 'Unknown error'}`);
-        setStatusText(t('statusFailed'));
+        if (!cancelled) {
+          setError(`${t('recoveryFailed')}: ${recoverErr.message || 'Unknown error'}`);
+          setStatusText(t('statusFailed'));
+        }
       } finally {
-        recoveringTaskRef.current = null;
+        if (!cancelled) {
+          recoveringTaskRef.current = null;
+        }
       }
     })();
+    return () => { cancelled = true; recoveringTaskRef.current = null; };
   }, [apiKey, getApi, importTaskWithWorkflow, importWorkflow, isGenerating, isImporting, models, pipeline, t]);
 
   const handleGenerate = useCallback(async () => {
@@ -421,7 +451,6 @@ export function GenerateTab() {
         geometry_quality: params.geometryQuality,
         model_seed: params.modelSeed,
         texture_seed: params.textureSeed,
-        style: style || undefined,
         render_image: true,
       }, params.modelVersion);
 
@@ -435,6 +464,7 @@ export function GenerateTab() {
           type: 'text_to_model',
           prompt: prompt.trim(),
           negative_prompt: negativePrompt.trim() || undefined,
+          style: style || undefined,
           ...baseParams,
         };
 
@@ -445,6 +475,7 @@ export function GenerateTab() {
           params: req,
           workflow: importWorkflow,
         };
+        nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
         pipelineIdxRef.current = nextStepIdx.current++;
         addPipelineStep(step);
 
@@ -473,6 +504,7 @@ export function GenerateTab() {
           params: req,
           workflow: importWorkflow,
         };
+        nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
         pipelineIdxRef.current = nextStepIdx.current++;
         addPipelineStep(step);
 
@@ -484,12 +516,12 @@ export function GenerateTab() {
         });
       } else {
         // multiview
-        const fileTokens = mvTokens.filter((t) => t !== null) as string[];
-        if (fileTokens.length < 1) {
-          setError(t('uploadMvRequired'));
+        if (mvTokens.includes(null)) {
+          setError(t('uploadMvRequired') || 'Please upload all 4 views for Multiview generation');
           setIsGenerating(false);
           return;
         }
+        const fileTokens = mvTokens as string[];
         const req: MultiviewToModelRequest = {
           type: 'multiview_to_model',
           files: fileTokens.map((t) => ({ type: 'image_token', file_token: t })),
@@ -503,6 +535,7 @@ export function GenerateTab() {
           params: req,
           workflow: importWorkflow,
         };
+        nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
         pipelineIdxRef.current = nextStepIdx.current++;
         addPipelineStep(step);
 
@@ -539,10 +572,10 @@ export function GenerateTab() {
       }
       await importTaskWithWorkflow(resultTask, importWorkflow, pipelineIndex);
     } catch (err: any) {
-      setError(err.message || 'Import failed');
+      setError(err.message || t('importFailed'));
       setStatusText('');
     }
-  }, [resultTask, importWorkflow, importTaskWithWorkflow, pipeline]);
+  }, [resultTask, importWorkflow, importTaskWithWorkflow, pipeline, t]);
 
   // Download model to local disk then import to AE with a specific workflow
   const handleImportWithSpecificWorkflow = useCallback(async (workflow: ImportWorkflow) => {
@@ -555,39 +588,49 @@ export function GenerateTab() {
       setImportWorkflow(workflow);
       await importTaskWithWorkflow(resultTask, workflow, pipelineIndex);
     } catch (err: any) {
-      setError(err.message || 'Import failed');
+      setError(err.message || t('importFailed'));
       setStatusText('');
     }
-  }, [resultTask, importTaskWithWorkflow, pipeline, setImportWorkflow]);
+  }, [resultTask, importTaskWithWorkflow, pipeline, setImportWorkflow, t]);
 
   // Upload File object via arrayBuffer — not file.name
   const handleImageUpload = useCallback(async (file: File) => {
     setImageFile(file);
+    setIsUploadingImage(true);
     try {
       const api = getApi();
       const token = await api.uploadImage(file);
       setImageToken(token);
     } catch (err: any) {
-      setError(err.message || 'Image upload failed');
+      setError(err.message || t('imageUploadFailed'));
+    } finally {
+      setIsUploadingImage(false);
     }
-  }, [getApi]);
+  }, [getApi, t]);
 
   const handleMvUpload = useCallback((index: number, file: File) => {
-    const newFiles = [...mvFiles];
-    newFiles[index] = file;
-    setMvFiles(newFiles);
+    setMvFiles((prev) => {
+      const next = [...prev];
+      next[index] = file;
+      return next;
+    });
 
     if (apiKey) {
       const api = new TripoApiService(apiKey);
+      setUploadingMvCount(c => c + 1);
       api.uploadImage(file).then((token) => {
-        const newTokens = [...mvTokens];
-        newTokens[index] = token;
-        setMvTokens(newTokens);
+        setMvTokens((prev) => {
+          const next = [...prev];
+          next[index] = token;
+          return next;
+        });
       }).catch((err) => {
-        setError(err.message || 'Image upload failed');
+        setError(err.message || t('imageUploadFailed'));
+      }).finally(() => {
+        setUploadingMvCount(c => Math.max(0, c - 1));
       });
     }
-  }, [apiKey, mvFiles, mvTokens]);
+  }, [apiKey, t]);
 
   const mvLabels = [t('front'), t('left'), t('back'), t('right')];
 
@@ -656,20 +699,16 @@ export function GenerateTab() {
           </div>
           <div style={styles.buttonRow}>
             <button
-              onClick={() => {
-                setError('Multiview image generation requires a source image');
-              }}
               style={styles.secondaryBtn}
               disabled
+              title={t('mvGenerateRequiresSource')}
             >
               {t('generateViews')}
             </button>
             <button
-              onClick={() => {
-                setError('Multiview image editing requires an existing task');
-              }}
               style={styles.secondaryBtn}
               disabled
+              title={t('mvEditRequiresTask')}
             >
               {t('editViews')}
             </button>
@@ -767,14 +806,14 @@ export function GenerateTab() {
       <div style={styles.bottomBar}>
         <button
           onClick={handleGenerate}
-          disabled={isGenerating || isImporting || !apiKey}
+          disabled={isGenerating || isImporting || !apiKey || isUploadingImage || uploadingMvCount > 0}
           style={
-            isGenerating || isImporting || !apiKey
+            isGenerating || isImporting || !apiKey || isUploadingImage || uploadingMvCount > 0
               ? styles.generateBtnDisabled
               : styles.generateBtn
           }
         >
-          {isGenerating ? t('generating') : t('generateBtn')}
+          {isGenerating ? t('generating') : (isUploadingImage || uploadingMvCount > 0) ? t('uploading') : t('generateBtn')}
         </button>
       </div>
     </div>
