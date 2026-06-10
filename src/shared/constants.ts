@@ -118,5 +118,17 @@ export const LOOP_TYPES: { value: LoopType; label: string }[] = [
   { value: 'breathe', label: 'Breathe' },
 ];
 
+// AE 2026 Material Presets (Adobe Standard Material)
+export const MATERIAL_PRESETS: { value: string; label: string; material: import('./types').MaterialProperties }[] = [
+  { value: 'default', label: 'Default', material: {} },
+  { value: 'metallic', label: 'Metallic', material: { metal: 1, reflectionIntensity: 80, reflectionSharpness: 90, diffuse: 30, specularIntensity: 80 } },
+  { value: 'glass', label: 'Glass', material: { transparency: 80, indexOrRefraction: 1.5, reflectionIntensity: 30, specularIntensity: 90, lightTransmission: 90 } },
+  { value: 'plastic', label: 'Plastic', material: { metal: 0, diffuse: 80, specularIntensity: 40, specularShininess: 30 } },
+  { value: 'rubber', label: 'Rubber', material: { metal: 0, diffuse: 90, specularIntensity: 10, specularShininess: 5 } },
+  { value: 'ceramic', label: 'Ceramic', material: { metal: 0, diffuse: 70, specularIntensity: 60, specularShininess: 80, reflectionIntensity: 20 } },
+  { value: 'gold', label: 'Gold', material: { metal: 1, ambient: 50, diffuse: 60, reflectionIntensity: 90, reflectionSharpness: 70, specularIntensity: 70 } },
+  { value: 'clay', label: 'Clay', material: { metal: 0, diffuse: 90, specularIntensity: 5, ambient: 20 } },
+];
+
 export const MODEL_SAVE_DIR = 'Tripo4AE/Models';
 export const TEMPLATE_SAVE_DIR = 'Tripo4AE/Templates';

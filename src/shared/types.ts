@@ -345,3 +345,43 @@ export interface AnimationConfig {
     frequency?: number;
   }>;
 }
+
+// === AE 2026 Advanced 3D ===
+
+export interface MaterialProperties {
+  ambient?: number;
+  diffuse?: number;
+  specularIntensity?: number;
+  specularShininess?: number;
+  metal?: number;
+  lightTransmission?: number;
+  reflectionIntensity?: number;
+  reflectionSharpness?: number;
+  reflectionRolloff?: number;
+  transparency?: number;
+  transparencyRolloff?: number;
+  indexOrRefraction?: number;
+}
+
+export interface ImportConfig {
+  autoScale?: boolean;
+  centerInComp?: boolean;
+  enableTimeRemap?: boolean;
+  selectEmbeddedAnim?: number;
+}
+
+export interface EnvironmentLightConfig {
+  intensity?: number;
+  hdrPath?: string;
+  castShadows?: boolean;
+  shadowDarkness?: number;
+  color?: number[];
+}
+
+export interface EmbeddedAnimationConfig {
+  layerIndex?: number;
+  animationIndex?: number;
+  animationName?: string;
+  enableTimeRemap?: boolean;
+  loopAnimation?: boolean;
+}

@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import type { CompInfo, AnimationConfig } from '../../shared/types';
+import type { CompInfo, AnimationConfig, MaterialProperties, ImportConfig, EnvironmentLightConfig, EmbeddedAnimationConfig } from '../../shared/types';
 
 declare const CSInterface: any;
 
@@ -59,8 +59,13 @@ export function useCsInterface() {
   );
 
   const importModel = useCallback(
-    (filePath: string): Promise<any> =>
-      evalScript(`tripo4ae.importModel('${escapeForEval(filePath)}')`),
+    (filePath: string, config?: ImportConfig): Promise<any> => {
+      if (config) {
+        const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return evalScript(`tripo4ae.importModel('${escapeForEval(filePath)}', '${json}')`);
+      }
+      return evalScript(`tripo4ae.importModel('${escapeForEval(filePath)}')`);
+    },
     [evalScript],
   );
 
@@ -68,6 +73,14 @@ export function useCsInterface() {
     (config: AnimationConfig): Promise<any> => {
       const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       return evalScript(`tripo4ae.applyAnimation('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const selectEmbeddedAnimation = useCallback(
+    (config: EmbeddedAnimationConfig): Promise<any> => {
+      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return evalScript(`tripo4ae.selectEmbeddedAnimation('${json}')`);
     },
     [evalScript],
   );
@@ -94,13 +107,46 @@ export function useCsInterface() {
     [evalScript],
   );
 
+  const setMaterialProperties = useCallback(
+    (config: { layerIndex?: number; material: MaterialProperties }): Promise<any> => {
+      const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return evalScript(`tripo4ae.setMaterialProperties('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const getMaterialProperties = useCallback(
+    (layerIndex?: number): Promise<any> => {
+      if (layerIndex !== undefined) {
+        return evalScript(`tripo4ae.getMaterialProperties('${layerIndex}')`);
+      }
+      return evalScript('tripo4ae.getMaterialProperties()');
+    },
+    [evalScript],
+  );
+
+  const createEnvironmentLight = useCallback(
+    (config?: EnvironmentLightConfig): Promise<any> => {
+      if (config) {
+        const json = JSON.stringify(config).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return evalScript(`tripo4ae.createEnvironmentLight('${json}')`);
+      }
+      return evalScript('tripo4ae.createEnvironmentLight()');
+    },
+    [evalScript],
+  );
+
   return {
     evalScript,
     getActiveCompInfo,
     importModel,
     applyAnimation,
+    selectEmbeddedAnimation,
     createCamera,
     createLights,
     setupE3D,
+    setMaterialProperties,
+    getMaterialProperties,
+    createEnvironmentLight,
   };
 }

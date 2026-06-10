@@ -1,7 +1,6 @@
 /**
- * animation.ts — ExtendScript host module
- * Runs inside After Effects ExtendScript engine.
- * Applies model animation presets and loop expressions.
+ * animation.ts — ExtendScript host module (AE 2024.4+ / 2025 / 2026)
+ * Applies model animation presets, loop expressions, and embedded animation control.
  */
 
 declare const app: any;
@@ -135,6 +134,86 @@ function applyLoopExpression(
       if (scaleProp) scaleProp.expression = expr;
       break;
     }
+  }
+}
+
+// --- Embedded animation control ---
+
+export function selectEmbeddedAnimation(config: {
+  layerIndex?: number;
+  animationIndex?: number;
+  animationName?: string;
+  enableTimeRemap?: boolean;
+  loopAnimation?: boolean;
+}): string {
+  try {
+    const comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: 'No active composition' });
+    }
+
+    let layer: any;
+    if (config.layerIndex !== undefined) {
+      layer = comp.layer(config.layerIndex + 1);
+    } else {
+      const selected = comp.selectedLayers;
+      if (selected.length === 0) {
+        return JSON.stringify({ ok: false, error: 'No layer selected' });
+      }
+      layer = selected[0];
+    }
+
+    // Enable time remap if requested
+    if (config.enableTimeRemap) {
+      try {
+        layer.timeRemapEnabled = true;
+      } catch (_) {}
+    }
+
+    // Select embedded animation via Animation Options
+    if (config.animationIndex !== undefined || config.animationName) {
+      try {
+        const animOptions = layer.property('ADBE Animation Options');
+        if (animOptions) {
+          const nameProp = animOptions.property('ADBE Animation Name')
+            || animOptions.property('ADBE Anim Options Name');
+          if (nameProp) {
+            if (config.animationIndex !== undefined) {
+              nameProp.setValue(config.animationIndex);
+            } else if (config.animationName) {
+              // Try to find the animation by name in the dropdown
+              // AE dropdown: try setting by name if value lookup fails
+              nameProp.setValue(config.animationName);
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Set time remap to loop the embedded animation
+    if (config.loopAnimation && layer.timeRemapEnabled) {
+      const timeRemap = layer.property('Time Remap');
+      if (timeRemap) {
+        const duration = timeRemap.keyValue(2) - timeRemap.keyValue(1);
+        timeRemap.expression = [
+          '// Tripo4AE Embedded Animation Loop',
+          'var duration = ' + duration + ';',
+          'var start = ' + timeRemap.keyValue(1) + ';',
+          'var t = (time - inPoint) % duration;',
+          'start + t;',
+        ].join('\n');
+      }
+    }
+
+    return JSON.stringify({
+      ok: true,
+      data: {
+        animationSelected: config.animationName || config.animationIndex || 'default',
+        loopEnabled: !!config.loopAnimation,
+      },
+    });
+  } catch (e) {
+    return JSON.stringify({ ok: false, error: String(e) });
   }
 }
 
