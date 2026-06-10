@@ -1102,9 +1102,10 @@ export function setupScene(configJson?: string): string {
       var lightGroup = lightLayer.property(LIGHT_GROUP);
       if (lightGroup) {
         try { lightGroup.property(LIGHT_MAP.falloffType).setValue(FALLOFF_SMOOTH); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.falloffType).setValue(FALLOFF_SMOOTH); } catch (e) {}
         try { lightGroup.property(LIGHT_MAP.falloffDistance).setValue(dist * 2); } catch (e) {}
         try { lightGroup.property(LIGHT_MAP.castsShadows).setValue(1); } catch (e) {}
-        try { lightGroup.property(LIGHT_MAP.shadowDarkness).setValue(50); } catch (e) {}
+        try { lightGroup.property(LIGHT_MAP.shadowDarkness).setValue(80); } catch (e) {}
       }
       createdLights.push(lc.name);
     }
@@ -1142,6 +1143,8 @@ export function setupScene(configJson?: string): string {
             var envLightGroup = envLayer.property("ADBE Light Options Group");
             if (envLightGroup) {
               try { envLightGroup.property("ADBE Light Backgd Visible").setValue(1); } catch (e) {}
+              // Enable Casts Shadows on Environment Light to get Ambient Occlusion / realistic grounding
+              try { envLightGroup.property("ADBE Casts Shadows").setValue(1); } catch (e) {}
             }
           }
         } catch (e) {
