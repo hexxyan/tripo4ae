@@ -97,6 +97,9 @@ export const translations = {
     importExternalBtn: 'Import External Model',
     noModels: 'No models generated yet. Start generating in the Generate tab!',
     noTemplates: 'No animation templates saved yet.',
+    taskHistoryHeader: 'Cloud Generation History (All Tasks)',
+    taskStatusImported: 'Imported',
+    taskStatusNotImported: 'Download & Import',
     
     // Status text
     statusIdle: 'Idle',
@@ -420,6 +423,9 @@ export const translations = {
     importExternalBtn: '导入本地外部模型',
     noModels: '本地库中暂无模型。请前往生成标签页开始创作吧！',
     noTemplates: '暂无保存的动画模板。',
+    taskHistoryHeader: '云端生成历史 (防止积分丢失)',
+    taskStatusImported: '已导入库',
+    taskStatusNotImported: '下载并导入 AE',
     
     // Status text
     statusIdle: '空闲',

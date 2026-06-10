@@ -13,6 +13,7 @@ export function LibraryTab() {
   const addModel = useStore((s) => s.addModel);
   const apiKey = useStore((s) => s.apiKey);
   const templates = useStore((s) => s.templates);
+  const pipeline = useStore((s) => s.pipeline);
   const csInterface = useCsInterface();
   const { t } = useTranslation();
 
@@ -100,6 +101,75 @@ export function LibraryTab() {
       setIsImporting(false);
     }
   }, [apiKey, csInterface, addModel, t]);
+
+  const getStepName = useCallback((step: any) => {
+    if (step.params && step.params.prompt) {
+      return step.params.prompt;
+    }
+    if (step.type === 'image_to_model') {
+      return 'Image to 3D';
+    }
+    if (step.type === 'multiview_to_model') {
+      return 'Multiview to 3D';
+    }
+    return '3D Model';
+  }, []);
+
+  const handleImportTask = useCallback(async (step: any) => {
+    if (!apiKey) {
+      setError(t('failedToConnect'));
+      return;
+    }
+    if (!step.taskId) return;
+
+    setImportingId(step.taskId);
+    setError(null);
+    try {
+      const api = new TripoApiService(apiKey);
+      const task = await api.getTask(step.taskId);
+
+      if (task.status === 'failed') {
+        throw new Error(t('statusFailed'));
+      }
+      if (task.status !== 'success') {
+        throw new Error(t('generating') || 'Model is still generating');
+      }
+
+      const workflow = step.workflow || 'advanced3d';
+      const saveDir = TripoApiService.getModelSaveDir();
+
+      const localPath = await api.downloadTaskResult(task, saveDir);
+
+      if (workflow === 'element3d') {
+        await csInterface.setupE3D(localPath);
+      } else {
+        await csInterface.importModel(localPath, {
+          addToComp: workflow !== 'project_only',
+          centerInComp: workflow !== 'project_only',
+          enableTimeRemap: workflow === 'advanced3d',
+        });
+      }
+
+      const model: ModelRecord = {
+        id: step.taskId,
+        taskId: step.taskId,
+        name: getStepName(step),
+        prompt: step.params?.prompt || '',
+        thumbnailUrl: task.output?.rendered_image,
+        modelPath: localPath,
+        format: workflow === 'element3d' ? 'OBJ' : 'GLB',
+        workflow,
+        createdAt: Date.now(),
+        pipelineSteps: [],
+      };
+
+      addModel(model);
+    } catch (err: any) {
+      setError(err.message || t('statusFailed'));
+    } finally {
+      setImportingId(null);
+    }
+  }, [apiKey, csInterface, addModel, getStepName, t]);
 
   const loadTemplate = useCallback((tmpl: AnimTemplate) => {
     // Templates are loaded from the Animation tab; just show a confirmation
@@ -230,6 +300,75 @@ export function LibraryTab() {
           ))
         )}
       </div>
+
+      {/* Cloud Generation History */}
+      <div style={styles.templateSection}>
+        <div style={styles.sectionTitle}>{t('taskHistoryHeader')}</div>
+        {(() => {
+          const HISTORY_TASK_TYPES = new Set(['text_to_model', 'image_to_model', 'multiview_to_model', 'refine_model', 'texture_model']);
+          const historyTasks = pipeline.filter(
+            (step): step is typeof step & { taskId: string } =>
+              !!step.taskId && HISTORY_TASK_TYPES.has(step.type)
+          );
+          const reversedHistoryTasks = [...historyTasks].reverse();
+
+          if (reversedHistoryTasks.length === 0) {
+            return <span style={styles.emptyText}>{t('noModels')}</span>;
+          }
+
+          return (
+            <div style={styles.historyList}>
+              {reversedHistoryTasks.map((step) => {
+                const isDownloaded = models.some((m) => m.taskId === step.taskId);
+                const isDownloading = importingId === step.taskId;
+
+                return (
+                  <div key={step.taskId} style={styles.historyCard}>
+                    {/* Thumbnail */}
+                    <div style={styles.historyThumbnail}>
+                      {step.output?.rendered_image ? (
+                        <img src={step.output.rendered_image} style={styles.thumbImg} alt="Thumbnail" />
+                      ) : (
+                        <span style={{ fontSize: 9, color: '#666' }}>3D</span>
+                      )}
+                    </div>
+
+                    {/* Details */}
+                    <div style={styles.historyInfo}>
+                      <div style={styles.historyName}>{getStepName(step)}</div>
+                      <div style={styles.historyMeta}>
+                        <span>{step.taskId.slice(0, 8)}...</span>
+                        <span>{t(step.status || '') || step.status}</span>
+                      </div>
+                    </div>
+
+                    {/* Action */}
+                    <div style={styles.historyActions}>
+                      {step.status === 'success' ? (
+                        isDownloaded ? (
+                          <span style={styles.importedBadge}>{t('taskStatusImported')}</span>
+                        ) : (
+                          <button
+                            onClick={() => handleImportTask(step)}
+                            disabled={isDownloading}
+                            style={styles.downloadBtn}
+                          >
+                            {isDownloading ? '...' : t('taskStatusNotImported')}
+                          </button>
+                        )
+                      ) : (
+                        <span style={styles.runningBadge}>
+                          {step.status === 'failed' ? t('statusFailed') : t('generating')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 }
@@ -299,4 +438,35 @@ const styles: Record<string, React.CSSProperties> = {
   },
   templateName: { fontSize: 10, color: '#e0e0e0' },
   templateMeta: { fontSize: 9, color: '#777' },
+  historyList: { display: 'flex', flexDirection: 'column', gap: 4 },
+  historyCard: {
+    display: 'flex', gap: 8, padding: '4px 6px',
+    border: '1px solid #333', borderRadius: 3, backgroundColor: '#252525',
+    alignItems: 'center',
+  },
+  historyThumbnail: {
+    width: 28, height: 28, flexShrink: 0,
+    backgroundColor: '#333', borderRadius: 2, overflow: 'hidden',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  historyInfo: { flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 },
+  historyName: {
+    fontSize: 9, fontWeight: 600, color: '#ccc',
+    whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis',
+  },
+  historyMeta: { display: 'flex', gap: 4, fontSize: 8, color: '#666' },
+  historyActions: { display: 'flex', gap: 4, flexShrink: 0 },
+  importedBadge: {
+    fontSize: 8, color: '#4caf50', padding: '1px 4px',
+    border: '1px solid #2e7d32', borderRadius: 2, backgroundColor: '#1b321b',
+  },
+  runningBadge: {
+    fontSize: 8, color: '#ffaa00', padding: '1px 4px',
+    border: '1px solid #332313', borderRadius: 2, backgroundColor: '#26190a',
+  },
+  downloadBtn: {
+    padding: '2px 5px', fontSize: 8,
+    backgroundColor: '#1b321b', border: '1px solid #2e7d32', borderRadius: 3,
+    color: '#4caf50', cursor: 'pointer',
+  },
 };
