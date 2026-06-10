@@ -220,4 +220,64 @@ describe('TaskPoller', () => {
       expect(mockApi.getTask).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ---- 7. Adaptive polling with running_left_time ----
+
+  describe('pollUntilDone() — adaptive polling with running_left_time', () => {
+    it('uses adaptive interval when running_left_time is provided', async () => {
+      const mockApi = createMockApi([
+        // running_left_time=10 => nextInterval = max(2000, floor(10*500)) = 5000
+        makeTask({ status: 'running', progress: 20, running_left_time: 10 }),
+        // running_left_time=1 => nextInterval = max(2000, floor(1*500)) = 2000
+        makeTask({ status: 'running', progress: 60, running_left_time: 1 }),
+        makeTask({ status: 'success', progress: 100 }),
+      ]);
+
+      const poller = new TaskPoller(mockApi);
+
+      const delaySpy = jest.spyOn(poller as unknown as { delay: (ms: number) => Promise<void> }, 'delay')
+        .mockResolvedValue(undefined);
+
+      const onProgress = jest.fn();
+
+      const result = await poller.pollUntilDone('task-001', {
+        interval: 3000,
+        timeout: 5000,
+        maxAttempts: 10,
+        onProgress,
+      });
+
+      expect(result.status).toBe('success');
+      expect(onProgress).toHaveBeenCalledTimes(2);
+
+      // delay should have been called twice (after first two non-terminal polls)
+      expect(delaySpy).toHaveBeenCalledTimes(2);
+
+      // First call: running_left_time=10 => max(2000, 5000) = 5000
+      expect(delaySpy).toHaveBeenNthCalledWith(1, 5000);
+      // Second call: running_left_time=1 => max(2000, 500) = 2000
+      expect(delaySpy).toHaveBeenNthCalledWith(2, 2000);
+    });
+
+    it('falls back to configured interval when running_left_time is absent', async () => {
+      const mockApi = createMockApi([
+        makeTask({ status: 'running', progress: 50 }),
+        makeTask({ status: 'success', progress: 100 }),
+      ]);
+
+      const poller = new TaskPoller(mockApi);
+
+      const delaySpy = jest.spyOn(poller as unknown as { delay: (ms: number) => Promise<void> }, 'delay')
+        .mockResolvedValue(undefined);
+
+      await poller.pollUntilDone('task-001', {
+        interval: 3000,
+        timeout: 5000,
+        maxAttempts: 10,
+      });
+
+      // Without running_left_time, should use configured interval of 3000
+      expect(delaySpy).toHaveBeenCalledWith(3000);
+    });
+  });
 });

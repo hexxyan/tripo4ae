@@ -17,7 +17,7 @@ export class TaskPoller {
   }
 
   async pollUntilDone(taskId: string, options?: PollOptions): Promise<TripoTask> {
-    const interval = options?.interval ?? 2000;
+    const defaultInterval = options?.interval ?? 2000;
     const timeout = options?.timeout ?? 300000;
     const maxAttempts = options?.maxAttempts ?? 150;
     const onProgress = options?.onProgress;
@@ -47,8 +47,14 @@ export class TaskPoller {
         onProgress(task);
       }
 
+      // Adaptive interval: use running_left_time if available, otherwise configured interval
+      let nextInterval = defaultInterval;
+      if (task.running_left_time != null && task.running_left_time > 0) {
+        nextInterval = Math.max(2000, Math.floor(task.running_left_time * 500));
+      }
+
       // Wait before next poll
-      await this.delay(interval);
+      await this.delay(nextInterval);
     }
 
     throw new Error(`Max attempts (${maxAttempts}) exceeded while polling task ${taskId}`);
