@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { Header } from './components/Header';
 import { PipelineStepper } from './components/PipelineStepper';
+import { GenerateTab } from './components/GenerateTab';
+import { RefineTextureTab } from './components/RefineTextureTab';
+import { AnimationTab } from './components/AnimationTab';
+import { TransformTab } from './components/TransformTab';
+import { LibraryTab } from './components/LibraryTab';
 import { useStore } from './stores/useStore';
 
 export type TabId = 'generate' | 'refine' | 'animate' | 'transform' | 'library';
@@ -17,15 +22,6 @@ const TABS: TabDef[] = [
   { id: 'transform', label: 'Transform' },
   { id: 'library', label: 'Library' },
 ];
-
-// Placeholder tab content — real tabs will be implemented in Tasks 12-16
-function PlaceholderTab({ name }: { name: string }) {
-  return (
-    <div style={styles.placeholder}>
-      <span style={styles.placeholderText}>{name}</span>
-    </div>
-  );
-}
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabId>('generate');
@@ -68,15 +64,15 @@ export function App() {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'generate':
-        return <PlaceholderTab name="Generate" />;
+        return <GenerateTab />;
       case 'refine':
-        return <PlaceholderTab name="Refine & Texture" />;
+        return <RefineTextureTab />;
       case 'animate':
-        return <PlaceholderTab name="Animate" />;
+        return <AnimationTab />;
       case 'transform':
-        return <PlaceholderTab name="Transform" />;
+        return <TransformTab />;
       case 'library':
-        return <PlaceholderTab name="Library" />;
+        return <LibraryTab />;
       default:
         return null;
     }
@@ -147,16 +143,5 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     overflowY: 'auto',
     overflowX: 'hidden',
-  },
-  placeholder: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    minHeight: 200,
-    color: '#666',
-  },
-  placeholderText: {
-    fontSize: 14,
   },
 };
