@@ -709,16 +709,16 @@ export function createLights(configJson: string): string {
     var lightsData = [
       {
         name: "Tripo4AE_Key", x: cx + dist * Math.cos(keyAngle), y: cy - dist * 0.6,
-        z: dist * Math.sin(keyAngle), intensity: intensity,
+        z: -dist * Math.sin(keyAngle), intensity: intensity,
         coneAngle: config.coneAngle, coneFeather: config.coneFeather,
       },
       {
         name: "Tripo4AE_Fill", x: cx - dist * Math.cos(keyAngle), y: cy - dist * 0.3,
-        z: dist * 0.5, intensity: intensity * fillRatio,
+        z: -dist * 0.5, intensity: intensity * fillRatio,
         coneAngle: undefined, coneFeather: undefined,
       },
       {
-        name: "Tripo4AE_Rim", x: cx, y: cy - dist * 0.8, z: -dist * 0.8,
+        name: "Tripo4AE_Rim", x: cx, y: cy - dist * 0.8, z: dist * 0.8,
         intensity: intensity * rimRatio,
         coneAngle: undefined, coneFeather: undefined,
       },
@@ -1086,9 +1086,9 @@ export function setupScene(configJson?: string): string {
     var lightColor = config.lightColor || [1, 1, 1];
     var keyAngle = ((config.keyAngle || 45) * Math.PI) / 180;
     var lightsConfig = [
-      { name: "Tripo4AE_Key", x: cx + dist * Math.cos(keyAngle), y: cy - dist * 0.6, z: dist * Math.sin(keyAngle), int: lightIntensity },
-      { name: "Tripo4AE_Fill", x: cx - dist * Math.cos(keyAngle), y: cy - dist * 0.3, z: dist * 0.5, int: lightIntensity * 0.4 },
-      { name: "Tripo4AE_Rim", x: cx, y: cy - dist * 0.8, z: -dist * 0.8, int: lightIntensity * 0.6 },
+      { name: "Tripo4AE_Key", x: cx + dist * Math.cos(keyAngle), y: cy - dist * 0.6, z: -dist * Math.sin(keyAngle), int: lightIntensity },
+      { name: "Tripo4AE_Fill", x: cx - dist * Math.cos(keyAngle), y: cy - dist * 0.3, z: -dist * 0.5, int: lightIntensity * 0.4 },
+      { name: "Tripo4AE_Rim", x: cx, y: cy - dist * 0.8, z: dist * 0.8, int: lightIntensity * 0.6 },
     ];
 
     var createdLights: string[] = [];
@@ -1227,7 +1227,7 @@ export function setupScene(configJson?: string): string {
       } catch (e) {}
 
       // Create 3D Ground Shadow Catcher Solid
-      var groundLayer = comp.layers.addSolid([0.5, 0.5, 0.5], "Tripo4AE_Ground", 5000, 5000, 1.0);
+      var groundLayer = comp.layers.addSolid([0.85, 0.85, 0.85], "Tripo4AE_Ground", 5000, 5000, 1.0);
       groundLayer.threeDLayer = true;
       
       // Orient flat (X Rotation = 90)
