@@ -16,7 +16,7 @@ interface TabDef {
   label: string;
 }
 
-declare const CSInterface: any;
+import CSInterface from '../js/lib/cep/csinterface';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabId>('generate');
@@ -38,7 +38,7 @@ export function App() {
     }
 
     if (!hasStoredLanguage) {
-      if (typeof CSInterface !== 'undefined') {
+      if (typeof window.cep !== 'undefined') {
         try {
           const csInterface = new CSInterface();
           const hostLang = csInterface.getHostEnvironment()?.appLanguage;

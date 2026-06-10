@@ -10,7 +10,7 @@ import type { ModelRecord, AnimTemplate } from '../../../shared/types';
 export function LibraryTab() {
   const models = useStore((s) => s.models);
   const removeModel = useStore((s) => s.removeModel);
-  const addModel = useStore((s) => s.addModel);
+  const upsertModel = useStore((s) => s.upsertModel);
   const apiKey = useStore((s) => s.apiKey);
   const templates = useStore((s) => s.templates);
   const pipeline = useStore((s) => s.pipeline);
@@ -19,6 +19,7 @@ export function LibraryTab() {
 
   const [error, setError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
 
   // External import
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -31,17 +32,35 @@ export function LibraryTab() {
     }
     setImportingId(model.id);
     setError(null);
+    console.log(`[Tripo4AE] Reimport model: path=${model.modelPath} workflow=${model.workflow}`);
     try {
       if (model.workflow === 'element3d') {
         await csInterface.setupE3D(model.modelPath);
       } else {
-        await csInterface.importModel(model.modelPath, {
+        const result = await csInterface.importModel(model.modelPath, {
           addToComp: model.workflow !== 'project_only',
           centerInComp: model.workflow !== 'project_only',
-          enableTimeRemap: model.workflow === 'advanced3d',
+          enableTimeRemap: true,
+          selectEmbeddedAnim: 1,
+          loopAnimation: true,
         });
+        console.log('[Tripo4AE] importModel result:', result);
+
+        // Auto-configure embedded animation if present
+        try {
+          await csInterface.selectEmbeddedAnimation({
+            layerIndex: result?.layerIndex,
+            animationIndex: 1,
+            enableTimeRemap: true,
+            loopAnimation: true,
+          });
+          console.log('[Tripo4AE] Auto-configured animation loop for:', model.name);
+        } catch (animErr: any) {
+          console.warn('[Tripo4AE] Auto-animation config skipped:', animErr.message);
+        }
       }
     } catch (err: any) {
+      console.error('[Tripo4AE] Reimport failed:', err);
       setError(err.message || t('statusFailed'));
     } finally {
       setImportingId(null);
@@ -78,10 +97,9 @@ export function LibraryTab() {
       const modelUrl = api.getModelUrl(task.output);
       if (!modelUrl) throw new Error(t('noModelUrlError'));
 
-      // Download to local, import to AE, persist to Library
+      // Download to local first so the asset is preserved even if AE import fails.
       const saveDir = TripoApiService.getModelSaveDir();
       const localPath = await api.downloadTaskResult(task, saveDir);
-      await csInterface.importModel(localPath);
 
       const newModel: ModelRecord = {
         id: taskId,
@@ -94,25 +112,42 @@ export function LibraryTab() {
         createdAt: Date.now(),
         pipelineSteps: [],
       };
-      addModel(newModel);
+      upsertModel(newModel);
+      await csInterface.importModel(localPath, {
+        enableTimeRemap: true,
+        selectEmbeddedAnim: 1,
+        loopAnimation: true,
+      });
     } catch (err: any) {
       setError(err.message || t('externalImportFailed'));
     } finally {
       setIsImporting(false);
     }
-  }, [apiKey, csInterface, addModel, t]);
+  }, [apiKey, csInterface, t, upsertModel]);
 
   const getStepName = useCallback((step: any) => {
-    if (step.params && step.params.prompt) {
-      return step.params.prompt;
-    }
-    if (step.type === 'image_to_model') {
-      return 'Image to 3D';
-    }
-    if (step.type === 'multiview_to_model') {
-      return 'Multiview to 3D';
-    }
-    return '3D Model';
+    if (step.params?.prompt) return step.params.prompt;
+    const names: Record<string, string> = {
+      text_to_model: 'Text to 3D',
+      image_to_model: 'Image to 3D',
+      multiview_to_model: 'Multiview to 3D',
+      refine_model: 'Refine',
+      texture_model: 'Texture',
+      animate_prerigcheck: 'Rig Check',
+      animate_rig: 'Rig',
+      animate_retarget: 'Animate',
+      convert_model: 'Convert',
+      stylize_model: 'Stylize',
+      generate_image: 'Gen Image',
+      text_to_image: 'Text to Image',
+      generate_multiview_image: 'Multiview Img',
+      edit_multiview_image: 'Edit Multiview',
+      mesh_segmentation: 'Segment',
+      mesh_completion: 'Mesh Complete',
+      highpoly_to_lowpoly: 'LOD Reduce',
+      import_model: 'Import',
+    };
+    return names[step.type] || step.type;
   }, []);
 
   const handleImportTask = useCallback(async (step: any) => {
@@ -138,17 +173,13 @@ export function LibraryTab() {
       const workflow = step.workflow || 'advanced3d';
       const saveDir = TripoApiService.getModelSaveDir();
 
-      const localPath = await api.downloadTaskResult(task, saveDir);
-
-      if (workflow === 'element3d') {
-        await csInterface.setupE3D(localPath);
-      } else {
-        await csInterface.importModel(localPath, {
-          addToComp: workflow !== 'project_only',
-          centerInComp: workflow !== 'project_only',
-          enableTimeRemap: workflow === 'advanced3d',
-        });
-      }
+      setDownloadProgress(0);
+      const localPath = await api.downloadTaskResult(task, saveDir, (bytes, total) => {
+        if (total > 0) {
+          const pct = Math.floor((bytes / total) * 100);
+          setDownloadProgress(pct);
+        }
+      });
 
       const model: ModelRecord = {
         id: step.taskId,
@@ -162,14 +193,38 @@ export function LibraryTab() {
         createdAt: Date.now(),
         pipelineSteps: [],
       };
+      upsertModel(model);
 
-      addModel(model);
+      if (workflow === 'element3d') {
+        await csInterface.setupE3D(localPath);
+      } else {
+        const importResult = await csInterface.importModel(localPath, {
+          addToComp: workflow !== 'project_only',
+          centerInComp: workflow !== 'project_only',
+          enableTimeRemap: true,
+          selectEmbeddedAnim: 1,
+          loopAnimation: true,
+        });
+
+        // Auto-configure embedded animation if present
+        try {
+          await csInterface.selectEmbeddedAnimation({
+            layerIndex: importResult?.layerIndex,
+            animationIndex: 1,
+            enableTimeRemap: true,
+            loopAnimation: true,
+          });
+        } catch (animErr: any) {
+          console.warn('[Tripo4AE] Auto-animation config skipped:', animErr.message);
+        }
+      }
     } catch (err: any) {
       setError(err.message || t('statusFailed'));
     } finally {
       setImportingId(null);
+      setDownloadProgress(null);
     }
-  }, [apiKey, csInterface, addModel, getStepName, t]);
+  }, [apiKey, csInterface, getStepName, t, upsertModel]);
 
   const loadTemplate = useCallback((tmpl: AnimTemplate) => {
     // Templates are loaded from the Animation tab; just show a confirmation
@@ -254,6 +309,7 @@ export function LibraryTab() {
               <div style={styles.modelInfo}>
                 <div style={styles.modelName}>{model.name}</div>
                 <div style={styles.modelMeta}>
+                  <span>{model.taskId?.slice(0, 8)}</span>
                   <span>{model.format}</span>
                   <span>{t(model.workflow || '')}</span>
                   <span>{formatDate(model.createdAt)}</span>
@@ -305,10 +361,9 @@ export function LibraryTab() {
       <div style={styles.templateSection}>
         <div style={styles.sectionTitle}>{t('taskHistoryHeader')}</div>
         {(() => {
-          const HISTORY_TASK_TYPES = new Set(['text_to_model', 'image_to_model', 'multiview_to_model', 'refine_model', 'texture_model']);
           const historyTasks = pipeline.filter(
             (step): step is typeof step & { taskId: string } =>
-              !!step.taskId && HISTORY_TASK_TYPES.has(step.type)
+              !!step.taskId && step.status !== 'pending'
           );
           const reversedHistoryTasks = [...historyTasks].reverse();
 
@@ -322,6 +377,12 @@ export function LibraryTab() {
                 const isDownloaded = models.some((m) => m.taskId === step.taskId);
                 const isDownloading = importingId === step.taskId;
 
+                const thumbIcon: Record<string, string> = {
+                  animate_rig: '🦴', animate_retarget: '🎬', animate_prerigcheck: '🔍',
+                  convert_model: '📦', stylize_model: '🎨', texture_model: '🖌',
+                  generate_image: '🖼', text_to_image: '🖼',
+                };
+
                 return (
                   <div key={step.taskId} style={styles.historyCard}>
                     {/* Thumbnail */}
@@ -329,7 +390,7 @@ export function LibraryTab() {
                       {step.output?.rendered_image ? (
                         <img src={step.output.rendered_image} style={styles.thumbImg} alt="Thumbnail" />
                       ) : (
-                        <span style={{ fontSize: 9, color: '#666' }}>3D</span>
+                        <span style={{ fontSize: 9, color: '#888' }}>{thumbIcon[step.type] || '3D'}</span>
                       )}
                     </div>
 
@@ -337,6 +398,7 @@ export function LibraryTab() {
                     <div style={styles.historyInfo}>
                       <div style={styles.historyName}>{getStepName(step)}</div>
                       <div style={styles.historyMeta}>
+                        <span>{step.type}</span>
                         <span>{step.taskId.slice(0, 8)}...</span>
                         <span>{t(step.status || '') || step.status}</span>
                       </div>
@@ -353,7 +415,11 @@ export function LibraryTab() {
                             disabled={isDownloading}
                             style={styles.downloadBtn}
                           >
-                            {isDownloading ? '...' : t('taskStatusNotImported')}
+                            {isDownloading
+                              ? downloadProgress !== null
+                                ? `${downloadProgress}%`
+                                : '...'
+                              : t('taskStatusNotImported')}
                           </button>
                         )
                       ) : (

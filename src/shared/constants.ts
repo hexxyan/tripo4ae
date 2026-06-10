@@ -107,6 +107,7 @@ export const CAMERA_PRESETS: { value: CameraPreset; label: string }[] = [
 export const MODEL_PRESETS: { value: ModelPreset; label: string }[] = [
   { value: 'fade-in', label: 'Fade In' },
   { value: 'scale-pop', label: 'Scale Pop' },
+  { value: 'elastic-pop', label: 'Elastic Pop' },
   { value: 'flip', label: 'Flip In' },
   { value: 'slide-in', label: 'Slide In' },
 ];
@@ -138,3 +139,16 @@ export const MATERIAL_PRESETS: { value: string; label: string; material: import(
 
 export const MODEL_SAVE_DIR = 'Tripo4AE/Models';
 export const TEMPLATE_SAVE_DIR = 'Tripo4AE/Templates';
+export const HDR_SAVE_DIR = 'Tripo4AE/HDR';
+
+// Free CC0 HDR environment maps from Poly Haven via pmndrs/drei-assets & gh-proxy (1k resolution, ~1.5MB each)
+export const HDR_PRESETS = [
+  { id: 'studio_small_03', label: 'Studio Soft', url: 'https://gh-proxy.com/https://raw.githubusercontent.com/pmndrs/drei-assets/master/hdri/studio_small_03_1k.hdr' },
+  { id: 'potsdamer_platz', label: 'City Lights', url: 'https://gh-proxy.com/https://raw.githubusercontent.com/pmndrs/drei-assets/master/hdri/potsdamer_platz_1k.hdr' },
+  { id: 'venice_sunset', label: 'Sunset Glow', url: 'https://gh-proxy.com/https://raw.githubusercontent.com/pmndrs/drei-assets/master/hdri/venice_sunset_1k.hdr' },
+  { id: 'kiara_1_dawn', label: 'Dawn Kiara', url: 'https://gh-proxy.com/https://raw.githubusercontent.com/pmndrs/drei-assets/master/hdri/kiara_1_dawn_1k.hdr' },
+  { id: 'forest_slope', label: 'Forest Slope', url: 'https://gh-proxy.com/https://raw.githubusercontent.com/pmndrs/drei-assets/master/hdri/forest_slope_1k.hdr' },
+  { id: 'rooitou_park', label: 'Park Grassy', url: 'https://gh-proxy.com/https://raw.githubusercontent.com/pmndrs/drei-assets/master/hdri/rooitou_park_1k.hdr' },
+  { id: 'empty_warehouse_01', label: 'Warehouse Empty', url: 'https://gh-proxy.com/https://raw.githubusercontent.com/pmndrs/drei-assets/master/hdri/empty_warehouse_01_1k.hdr' },
+  { id: 'dikhololo_night', label: 'Night Starry', url: 'https://gh-proxy.com/https://raw.githubusercontent.com/pmndrs/drei-assets/master/hdri/dikhololo_night_1k.hdr' },
+];

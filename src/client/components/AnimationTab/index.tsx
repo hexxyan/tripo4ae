@@ -13,6 +13,8 @@ import {
   EASING_TYPES,
   LOOP_TYPES,
   MATERIAL_PRESETS,
+  HDR_PRESETS,
+  HDR_SAVE_DIR,
 } from '../../../shared/constants';
 import type {
   RigType,
@@ -128,6 +130,7 @@ export function AnimationTab() {
   const addPipelineStep = useStore((s) => s.addPipelineStep);
   const updatePipelineStep = useStore((s) => s.updatePipelineStep);
   const addModel = useStore((s) => s.addModel);
+  const setBalance = useStore((s) => s.setBalance);
   const csInterface = useCsInterface();
   const { t } = useTranslation();
 
@@ -136,15 +139,46 @@ export function AnimationTab() {
   const importTaskToAe = useCallback(async (task: TripoTask, label: string) => {
     if (importedTaskIds.current.has(task.task_id)) return;
     importedTaskIds.current.add(task.task_id);
+    setIsRunning(true);
+    setTaskProgress(0);
+    setTaskStatus(t('statusDownloading'));
     try {
       const api = new TripoApiService(apiKey!);
       const modelUrl = api.getModelUrl(task.output);
       if (!modelUrl) return;
 
       const saveDir = TripoApiService.getModelSaveDir();
-      const localPath = await api.downloadTaskResult(task, saveDir);
+      const localPath = await api.downloadTaskResult(task, saveDir, (bytes, total) => {
+        if (total > 0) {
+          const pct = Math.floor((bytes / total) * 100);
+          setTaskProgress(pct);
+          setTaskStatus(`${t('statusDownloading')} ${pct}%`);
+        } else {
+          const mb = (bytes / 1048576).toFixed(1);
+          setTaskStatus(`${t('statusDownloading')} (${mb} MB)`);
+        }
+      });
 
-      await csInterface.importModel(localPath);
+      setTaskProgress(90);
+      setTaskStatus(t('importing'));
+
+      // Import with time remap and auto-loop for animated/rigged models (out-of-box experience)
+      const isAnimated = label.includes('Animated') || label.includes('Rigged') || task.type === 'animate_retarget';
+      await csInterface.importModel(localPath, {
+        enableTimeRemap: isAnimated,
+        selectEmbeddedAnim: isAnimated ? 1 : undefined,
+        loopAnimation: isAnimated ? true : undefined,
+        centerInComp: true,
+      });
+
+      setTaskProgress(100);
+      setTaskStatus(t('statusSuccess'));
+
+      // Refresh credit balance
+      try {
+        const balRes = await api.getBalance();
+        setBalance(balRes.balance);
+      } catch {}
 
       const model: ModelRecord = {
         id: task.task_id,
@@ -157,10 +191,12 @@ export function AnimationTab() {
         pipelineSteps: [...pipeline],
       };
       addModel(model);
-    } catch {
-      // Non-blocking
+    } catch (err: any) {
+      setError(err.message || t('statusFailed'));
+    } finally {
+      setIsRunning(false);
     }
-  }, [apiKey, csInterface, addModel, pipeline]);
+  }, [apiKey, csInterface, addModel, pipeline, setBalance, t]);
 
   // Common state
   const modelSteps = pipeline.filter((s) => s.status === 'success' && s.taskId);
@@ -230,6 +266,12 @@ export function AnimationTab() {
           output: result.output,
         });
       }
+      // Refresh balance after API task completes
+      try {
+        const balApi = getApi();
+        const balRes = await balApi.getBalance();
+        setBalance(balRes.balance);
+      } catch {}
       return result;
     } catch (err: any) {
       setError(err.message || t('statusFailed'));
@@ -240,7 +282,7 @@ export function AnimationTab() {
     } finally {
       setIsRunning(false);
     }
-  }, [apiKey, getApi, addPipelineStep, updatePipelineStep, t]);
+  }, [apiKey, getApi, addPipelineStep, updatePipelineStep, setBalance, t]);
 
   // Prerigcheck
   const handlePrerigcheck = useCallback(async () => {
@@ -322,9 +364,134 @@ export function AnimationTab() {
   const [breatheAmp, setBreatheAmp] = useState(5);
   const [breatheFreq, setBreatheFreq] = useState(0.5);
 
+  // Embedded Animations state
+  const [embedAnimIndex, setEmbedAnimIndex] = useState(1);
+  const [embedLoopEnabled, setEmbedLoopEnabled] = useState(true);
+
+  // Custom Lighting & Environment states
+  const [lightIntensity, setLightIntensity] = useState(100);
+  const [lightColor, setLightColor] = useState('#ffffff');
+  const [keyAngle, setKeyAngle] = useState(45);
+  const [envIntensity, setEnvIntensity] = useState(60);
+  const [hdrPath, setHdrPath] = useState('');
+  const [castShadows, setCastShadows] = useState(true);
+  const [shadowDarkness, setShadowDarkness] = useState(50);
+  const [lightsEnvExpanded, setLightsEnvExpanded] = useState(false);
+
   // Scene & Material state
   const [sceneError, setSceneError] = useState<string | null>(null);
   const [matPreset, setMatPreset] = useState<MaterialPresetName>('plastic');
+
+  // Helper to convert hex color to [R, G, B] in [0, 1] range
+  const hexToRgbArray = useCallback((hexColor: string): [number, number, number] => {
+    const hex = hexColor.replace(/^#/, '');
+    const r = parseInt(hex.slice(0, 2), 16) / 255;
+    const g = parseInt(hex.slice(2, 4), 16) / 255;
+    const b = parseInt(hex.slice(4, 6), 16) / 255;
+    return [r, g, b];
+  }, []);
+
+  const handleBrowseHdr = useCallback(() => {
+    if (typeof window !== 'undefined' && (window as any).cep) {
+      const showOpenDialog = (window as any).cep.fs.showOpenDialogEx || (window as any).cep.fs.showOpenDialog;
+      if (showOpenDialog) {
+        const result = showOpenDialog(false, false, 'Select HDRI Map', '', ['hdr', 'exr']);
+        if (result && result.data && result.data.length > 0) {
+          const filePath = decodeURIComponent(result.data[0].replace(/^file:\/\//, ''));
+          setHdrPath(filePath);
+        }
+      }
+    }
+  }, []);
+
+  const [hdrDownloading, setHdrDownloading] = useState<string | null>(null);
+  const handleDownloadHdrPreset = useCallback(async (preset: typeof HDR_PRESETS[number]) => {
+    if (!apiKey) return;
+    const fs = (typeof window !== 'undefined' && (window as any).cep) ? (globalThis as any).require('fs') : null;
+    const nodePath = (typeof window !== 'undefined' && (window as any).cep) ? (globalThis as any).require('path') : null;
+    const nodeOs = (typeof window !== 'undefined' && (window as any).cep) ? (globalThis as any).require('os') : null;
+    if (!fs || !nodePath || !nodeOs) return;
+
+    const dir = nodePath.join(nodeOs.homedir(), HDR_SAVE_DIR);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const savePath = nodePath.join(dir, `${preset.id}.hdr`);
+
+    if (fs.existsSync(savePath)) {
+      setHdrPath(savePath);
+      return;
+    }
+
+    setHdrDownloading(preset.id);
+    try {
+      const api = new TripoApiService(apiKey);
+      await api.downloadModel(preset.url, savePath);
+      setHdrPath(savePath);
+      console.log(`[Tripo4AE] HDR preset downloaded: ${savePath}`);
+    } catch (err: any) {
+      setSceneError(`HDR download failed: ${err.message}`);
+    } finally {
+      setHdrDownloading(null);
+    }
+  }, [apiKey]);
+
+  const handleApplyEmbeddedAnim = useCallback(async () => {
+    setError(null);
+    try {
+      await csInterface.selectEmbeddedAnimation({
+        animationIndex: embedAnimIndex,
+        enableTimeRemap: true,
+        loopAnimation: embedLoopEnabled,
+      });
+    } catch (err: any) {
+      setError(err.message || 'Apply embedded animation failed');
+    }
+  }, [csInterface, embedAnimIndex, embedLoopEnabled]);
+
+  const handleCreateEnvLight = useCallback(async () => {
+    setSceneError(null);
+    try {
+      await csInterface.createEnvironmentLight({
+        intensity: envIntensity,
+        hdrPath: hdrPath.trim() || undefined,
+        castShadows,
+        shadowDarkness,
+      });
+    } catch (err: any) {
+      setSceneError(err.message || 'Create environment light failed');
+    }
+  }, [csInterface, envIntensity, hdrPath, castShadows, shadowDarkness]);
+
+  const handleCreateLights = useCallback(async () => {
+    setSceneError(null);
+    try {
+      await csInterface.createLights({
+        intensity: lightIntensity,
+        color: hexToRgbArray(lightColor),
+        keyAngle,
+        fillRatio: 0.4,
+        rimRatio: 0.6,
+      });
+    } catch (err: any) {
+      setSceneError(err.message || 'Create lights failed');
+    }
+  }, [csInterface, lightIntensity, lightColor, keyAngle, hexToRgbArray]);
+
+  const handleSetupScene = useCallback(async () => {
+    setSceneError(null);
+    try {
+      await csInterface.setupScene({
+        cameraDistance: 800,
+        depthOfField: true,
+        lightIntensity,
+        lightColor: hexToRgbArray(lightColor),
+        keyAngle,
+        envIntensity,
+        hdrPath: hdrPath.trim() || undefined,
+      });
+    } catch (err: any) {
+      setSceneError(err.message || 'Scene setup failed');
+    }
+  }, [csInterface, lightIntensity, lightColor, keyAngle, envIntensity, hdrPath, hexToRgbArray]);
 
   // Advanced PBR Material Option states
   const [pbrEditorExpanded, setPbrEditorExpanded] = useState(false);
@@ -338,15 +505,6 @@ export function AnimationTab() {
   const [pbrReflectionSharpness, setPbrReflectionSharpness] = useState(50);
   const [pbrTransparency, setPbrTransparency] = useState(0);
   const [pbrIndexOrRefraction, setPbrIndexOrRefraction] = useState(1.5);
-
-  const handleSetupScene = useCallback(async () => {
-    setSceneError(null);
-    try {
-      await csInterface.setupScene({ cameraDistance: 800, depthOfField: true, lightIntensity: 100 });
-    } catch (err: any) {
-      setSceneError(err.message || 'Scene setup failed');
-    }
-  }, [csInterface]);
 
   const handleApplyMaterial = useCallback(async () => {
     setSceneError(null);
@@ -372,15 +530,15 @@ export function AnimationTab() {
     try {
       const props = await csInterface.getMaterialProperties();
       if (props) {
-        if (props.ambient !== undefined) setPbrAmbient(Math.round(props.ambient * 100));
-        if (props.diffuse !== undefined) setPbrDiffuse(Math.round(props.diffuse * 100));
-        if (props.specularIntensity !== undefined) setPbrSpecularIntensity(Math.round(props.specularIntensity * 100));
-        if (props.specularShininess !== undefined) setPbrSpecularShininess(Math.round(props.specularShininess * 100));
-        if (props.metal !== undefined) setPbrMetal(Math.round(props.metal * 100));
-        if (props.lightTransmission !== undefined) setPbrLightTransmission(Math.round(props.lightTransmission * 100));
-        if (props.reflectionIntensity !== undefined) setPbrReflectionIntensity(Math.round(props.reflectionIntensity * 100));
-        if (props.reflectionSharpness !== undefined) setPbrReflectionSharpness(Math.round(props.reflectionSharpness * 100));
-        if (props.transparency !== undefined) setPbrTransparency(Math.round(props.transparency * 100));
+        if (props.ambient !== undefined) setPbrAmbient(Math.round(props.ambient));
+        if (props.diffuse !== undefined) setPbrDiffuse(Math.round(props.diffuse));
+        if (props.specularIntensity !== undefined) setPbrSpecularIntensity(Math.round(props.specularIntensity));
+        if (props.specularShininess !== undefined) setPbrSpecularShininess(Math.round(props.specularShininess));
+        if (props.metal !== undefined) setPbrMetal(Math.round(props.metal));
+        if (props.lightTransmission !== undefined) setPbrLightTransmission(Math.round(props.lightTransmission));
+        if (props.reflectionIntensity !== undefined) setPbrReflectionIntensity(Math.round(props.reflectionIntensity));
+        if (props.reflectionSharpness !== undefined) setPbrReflectionSharpness(Math.round(props.reflectionSharpness));
+        if (props.transparency !== undefined) setPbrTransparency(Math.round(props.transparency));
         if (props.indexOrRefraction !== undefined) setPbrIndexOrRefraction(props.indexOrRefraction);
       }
     } catch (err: any) {
@@ -392,15 +550,15 @@ export function AnimationTab() {
     setSceneError(null);
     try {
       const material = {
-        ambient: pbrAmbient / 100,
-        diffuse: pbrDiffuse / 100,
-        specularIntensity: pbrSpecularIntensity / 100,
-        specularShininess: pbrSpecularShininess / 100,
-        metal: pbrMetal / 100,
-        lightTransmission: pbrLightTransmission / 100,
-        reflectionIntensity: pbrReflectionIntensity / 100,
-        reflectionSharpness: pbrReflectionSharpness / 100,
-        transparency: pbrTransparency / 100,
+        ambient: pbrAmbient,
+        diffuse: pbrDiffuse,
+        specularIntensity: pbrSpecularIntensity,
+        specularShininess: pbrSpecularShininess,
+        metal: pbrMetal,
+        lightTransmission: pbrLightTransmission,
+        reflectionIntensity: pbrReflectionIntensity,
+        reflectionSharpness: pbrReflectionSharpness,
+        transparency: pbrTransparency,
         indexOrRefraction: pbrIndexOrRefraction,
       };
       await csInterface.setMaterialProperties({ material });
@@ -484,15 +642,35 @@ export function AnimationTab() {
       {/* Model Selector */}
       <div style={styles.sectionBox}>
         <div style={styles.sectionTitle}>{t('sourceModelLabel')}</div>
-        <label style={styles.fieldLabel}>
-          {t('sourceModelLabel')}
-          <select value={modelStepIdx} onChange={(e) => setModelStepIdx(Number(e.target.value))} style={styles.select}>
-            <option value={-1}>{t('selectModelOption')}</option>
-            {modelSteps.map((step, i) => (
-              <option key={i} value={i}>{t(step.type)} ({step.taskId?.slice(0, 8)})</option>
-            ))}
-          </select>
-        </label>
+        {modelSteps.length === 0 ? (
+          <span style={{ fontSize: 9, color: '#666' }}>Generate a model first</span>
+        ) : (
+          <div style={styles.modelList}>
+            {modelSteps.map((step, i) => {
+              const prompt = (step.params as any)?.prompt || '';
+              const name = prompt
+                ? (prompt.length > 30 ? prompt.substring(0, 30) + '...' : prompt)
+                : t(step.type);
+              return (
+                <button
+                  key={step.taskId}
+                  onClick={() => setModelStepIdx(i)}
+                  style={modelStepIdx === i ? styles.modelItemActive : styles.modelItem}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {step.output?.rendered_image && (
+                      <img src={step.output.rendered_image} style={styles.modelThumb} alt="" />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={styles.modelItemName}>{name}</div>
+                      <div style={styles.modelItemMeta}>{step.taskId?.slice(0, 8)} · {t(step.type)}</div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Prerigcheck */}
@@ -578,14 +756,180 @@ export function AnimationTab() {
         </button>
       </div>
 
+      {/* Embedded Animations */}
+      <div style={styles.sectionBox}>
+        <div style={styles.sectionTitle}>{t('embeddedAnimHeader')}</div>
+        <div style={styles.row}>
+          <label style={{ ...styles.fieldLabel, flex: 1 }}>
+            {t('animIndexLabel')} (1 - 20)
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={embedAnimIndex}
+              onChange={(e) => setEmbedAnimIndex(Number(e.target.value))}
+              style={styles.numInput}
+            />
+          </label>
+          <label style={{ ...styles.checkLabel, flex: 1, justifyContent: 'center' }}>
+            <input
+              type="checkbox"
+              checked={embedLoopEnabled}
+              onChange={(e) => setEmbedLoopEnabled(e.target.checked)}
+            />
+            {t('loopAnimLabel')}
+          </label>
+        </div>
+        <button onClick={handleApplyEmbeddedAnim} style={styles.actionBtn}>
+          {t('applyEmbeddedBtn')}
+        </button>
+      </div>
+
       {/* Progress */}
-      {isRunning && <ProgressBar progress={taskProgress} status={taskStatus} />}
+      {isRunning && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <ProgressBar progress={taskProgress} status={taskStatus} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
+            <button
+              onClick={() => {
+                setIsRunning(false);
+                setTaskProgress(0);
+                setTaskStatus('');
+              }}
+              style={styles.cancelBtn}
+            >
+              {t('cancelBtn')}
+            </button>
+          </div>
+        </div>
+      )}
       {error && <div style={styles.error}>{error}</div>}
 
       {/* Scene Setup */}
       <div style={styles.sectionBox}>
         <div style={styles.sectionTitle}>{t('sceneSetupTitle')}</div>
         <p style={styles.hint}>{t('sceneSetupHint')}</p>
+
+        {/* Collapsible Advanced Lights/Env Config */}
+        <div
+          onClick={() => setLightsEnvExpanded(!lightsEnvExpanded)}
+          style={{ ...styles.sectionSubTitle, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        >
+          <span>{t('lightsEnvConfigHeader')}</span>
+          <span>{lightsEnvExpanded ? '▼' : '▶'}</span>
+        </div>
+
+        {lightsEnvExpanded && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+            {/* 3-Point Light Params */}
+            <div style={styles.row}>
+              <label style={{ ...styles.fieldLabel, flex: 1 }}>
+                {t('lightIntensityLabel')}: {lightIntensity}%
+                <input
+                  type="range" min={0} max={200} step={5}
+                  value={lightIntensity} onChange={(e) => setLightIntensity(Number(e.target.value))}
+                  style={styles.slider}
+                />
+              </label>
+              <label style={{ ...styles.fieldLabel, width: 60 }}>
+                {t('lightColorLabel')}
+                <input
+                  type="color"
+                  value={lightColor}
+                  onChange={(e) => setLightColor(e.target.value)}
+                  style={{ width: '100%', height: 20, border: '1px solid #444', padding: 0, backgroundColor: 'transparent', cursor: 'pointer' }}
+                />
+              </label>
+            </div>
+
+            <label style={styles.fieldLabel}>
+              {t('keyAngleLabel')}: {keyAngle}°
+              <input
+                type="range" min={-180} max={180} step={5}
+                value={keyAngle} onChange={(e) => setKeyAngle(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            {/* Env Light Params */}
+            <label style={styles.fieldLabel}>
+              {t('envIntensityLabel')}: {envIntensity}%
+              <input
+                type="range" min={0} max={200} step={5}
+                value={envIntensity} onChange={(e) => setEnvIntensity(Number(e.target.value))}
+                style={styles.slider}
+              />
+            </label>
+
+            {/* HDRI Path Input & Browse */}
+            <div style={styles.fieldLabel}>
+              {t('hdrPathLabel')}
+              <div style={styles.row}>
+                <input
+                  type="text"
+                  value={hdrPath}
+                  onChange={(e) => setHdrPath(e.target.value)}
+                  style={styles.input}
+                  placeholder="e.g. /path/to/map.hdr"
+                />
+                <button onClick={handleBrowseHdr} style={styles.browseBtn}>
+                  {t('browseBtn')}
+                </button>
+              </div>
+            </div>
+
+            {/* HDR Presets */}
+            <div style={styles.fieldLabel}>
+              <span style={{ fontSize: 9, color: '#888' }}>Free HDR Presets (CC0, Poly Haven)</span>
+              <div style={styles.presetRow}>
+                {HDR_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => handleDownloadHdrPreset(p)}
+                    disabled={!!hdrDownloading}
+                    style={hdrPath.endsWith(`${p.id}.hdr`) ? styles.presetBtnActive : styles.presetBtn}
+                    title={p.label}
+                  >
+                    {hdrDownloading === p.id ? '...' : p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Shadow options */}
+            <div style={styles.row}>
+              <label style={{ ...styles.checkLabel, flex: 1 }}>
+                <input
+                  type="checkbox"
+                  checked={castShadows}
+                  onChange={(e) => setCastShadows(e.target.checked)}
+                />
+                {t('castShadowsLabel')}
+              </label>
+              {castShadows && (
+                <label style={{ ...styles.fieldLabel, flex: 1 }}>
+                  {t('shadowDarknessLabel')}: {shadowDarkness}%
+                  <input
+                    type="range" min={0} max={100} step={5}
+                    value={shadowDarkness} onChange={(e) => setShadowDarkness(Number(e.target.value))}
+                    style={styles.slider}
+                  />
+                </label>
+              )}
+            </div>
+
+            {/* Independent Trigger Buttons */}
+            <div style={styles.row}>
+              <button onClick={handleCreateLights} style={{ ...styles.secondaryBtn, flex: 1, padding: '4px 0', fontSize: 9 }}>
+                {t('createLightsBtn')}
+              </button>
+              <button onClick={handleCreateEnvLight} style={{ ...styles.secondaryBtn, flex: 1, padding: '4px 0', fontSize: 9 }}>
+                {t('createEnvLightBtn')}
+              </button>
+            </div>
+          </div>
+        )}
+
         <button onClick={handleSetupScene} style={styles.actionBtn}>
           {t('sceneSetupBtn')}
         </button>
@@ -924,5 +1268,56 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '3px 6px', fontSize: 9,
     backgroundColor: '#333', border: '1px solid #444', borderRadius: 3,
     color: '#ccc', cursor: 'pointer', textAlign: 'left' as const, marginBottom: 2,
+  },
+  sectionSubTitle: {
+    fontSize: 10,
+    fontWeight: 600,
+    color: '#999',
+    marginTop: 4,
+    paddingBottom: 2,
+    borderBottom: '1px dotted #333',
+  },
+  browseBtn: {
+    padding: '3px 8px',
+    fontSize: 9,
+    backgroundColor: '#3d3d3d',
+    border: '1px solid #444',
+    borderRadius: 3,
+    color: '#4a9eff',
+    cursor: 'pointer',
+  },
+  cancelBtn: {
+    padding: '3px 8px',
+    border: '1px solid #662222',
+    borderRadius: 3,
+    backgroundColor: '#3a1a1a',
+    color: '#ff6b6b',
+    fontSize: 9,
+    cursor: 'pointer',
+  },
+  modelList: {
+    display: 'flex', flexDirection: 'column', gap: 4,
+    maxHeight: 150, overflowY: 'auto' as const,
+  },
+  modelItem: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    padding: '4px 6px', border: '1px solid #333', borderRadius: 3,
+    backgroundColor: '#252525', cursor: 'pointer', textAlign: 'left' as const,
+  },
+  modelItemActive: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    padding: '4px 6px', border: '1px solid #4a9eff', borderRadius: 3,
+    backgroundColor: '#2a3a4f', cursor: 'pointer', textAlign: 'left' as const,
+  },
+  modelThumb: {
+    width: 28, height: 28, borderRadius: 2, objectFit: 'cover' as const, flexShrink: 0,
+    backgroundColor: '#333',
+  },
+  modelItemName: {
+    fontSize: 10, fontWeight: 600, color: '#e0e0e0',
+    whiteSpace: 'nowrap' as const, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const,
+  },
+  modelItemMeta: {
+    fontSize: 8, color: '#777',
   },
 };

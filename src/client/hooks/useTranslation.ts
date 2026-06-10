@@ -100,6 +100,21 @@ export const translations = {
     taskHistoryHeader: 'Cloud Generation History (All Tasks)',
     taskStatusImported: 'Imported',
     taskStatusNotImported: 'Download & Import',
+    embeddedAnimHeader: 'Embedded Model Animations',
+    animIndexLabel: 'Animation Index',
+    loopAnimLabel: 'Loop Animation',
+    applyEmbeddedBtn: 'Apply Embedded Animation',
+    lightsEnvConfigHeader: 'Advanced Lights & Env Options',
+    lightIntensityLabel: 'Light Intensity',
+    lightColorLabel: 'Light Color',
+    keyAngleLabel: 'Key Light Angle',
+    envIntensityLabel: 'Environment Intensity',
+    hdrPathLabel: 'HDRI Map Path',
+    browseBtn: 'Browse',
+    castShadowsLabel: 'Cast Shadows',
+    shadowDarknessLabel: 'Shadow Darkness',
+    createEnvLightBtn: 'Create Env Light Only',
+    createLightsBtn: 'Create 3-Point Lights Only',
     
     // Status text
     statusIdle: 'Idle',
@@ -171,6 +186,7 @@ export const translations = {
     // Model entrance presets
     'fade-in': 'Fade In',
     'scale-pop': 'Scale Pop',
+    'elastic-pop': 'Elastic Pop',
     flip: 'Flip In',
     'slide-in': 'Slide In',
 
@@ -327,6 +343,7 @@ export const translations = {
     readCurrentBtn: 'Read Current',
     advancedPbrHint: 'Expand to micro-tune Ambient, Metal, Transmission, IOR, etc.',
     rigSpecLabel: 'Spec',
+    cancelBtn: 'Cancel',
   },
   zh: {
     // Tabs & Header
@@ -426,6 +443,21 @@ export const translations = {
     taskHistoryHeader: '云端生成历史 (防止积分丢失)',
     taskStatusImported: '已导入库',
     taskStatusNotImported: '下载并导入 AE',
+    embeddedAnimHeader: '嵌入模型动画控制',
+    animIndexLabel: '动画索引',
+    loopAnimLabel: '循环播放',
+    applyEmbeddedBtn: '应用嵌入动画',
+    lightsEnvConfigHeader: '灯光与环境光高级设置',
+    lightIntensityLabel: '灯光强度',
+    lightColorLabel: '灯光颜色',
+    keyAngleLabel: '主光水平角度',
+    envIntensityLabel: '环境光强度',
+    hdrPathLabel: 'HDRI 贴图路径',
+    browseBtn: '浏览',
+    castShadowsLabel: '投射阴影',
+    shadowDarknessLabel: '阴影黑暗度',
+    createEnvLightBtn: '单独创建环境光',
+    createLightsBtn: '独立三点布光',
     
     // Status text
     statusIdle: '空闲',
@@ -497,6 +529,7 @@ export const translations = {
     // Model entrance presets
     'fade-in': '淡入淡出 (Fade In)',
     'scale-pop': '缩放弹出 (Scale Pop)',
+    'elastic-pop': '弹性缩放登场 (Elastic Pop)',
     flip: '翻转入场 (Flip In)',
     'slide-in': '滑动切入 (Slide In)',
 
@@ -663,6 +696,7 @@ export const translations = {
     readCurrentBtn: '读取当前图层属性',
     advancedPbrHint: '展开滑块，以微调材质的环境光反射、金属度、折射率等物理细节。',
     rigSpecLabel: '骨骼命名规范',
+    cancelBtn: '取消',
   }
 };
 

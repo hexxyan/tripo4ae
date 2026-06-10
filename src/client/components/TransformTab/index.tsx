@@ -14,6 +14,7 @@ import type {
   ModelRecord,
 } from '../../../shared/types';
 import { ProgressBar } from '../common/ProgressBar';
+import { ModelSelector } from '../common/ModelSelector';
 
 export function TransformTab() {
   const apiKey = useStore((s) => s.apiKey);
@@ -279,15 +280,12 @@ export function TransformTab() {
       {/* Model Selector */}
       <div style={styles.sectionBox}>
         <div style={styles.sectionTitle}>{t('sourceModelLabel')}</div>
-        <label style={styles.fieldLabel}>
-          {t('sourceModelLabel')}
-          <select value={modelStepIdx} onChange={(e) => setModelStepIdx(Number(e.target.value))} style={styles.select}>
-            <option value={-1}>{t('selectModelOption')}</option>
-            {modelSteps.map((step, i) => (
-              <option key={i} value={i}>{t(step.type)} ({step.taskId?.slice(0, 8)})</option>
-            ))}
-          </select>
-        </label>
+        <ModelSelector
+          steps={modelSteps}
+          selectedIdx={modelStepIdx}
+          onSelect={setModelStepIdx}
+          emptyText={t('selectModelOption')}
+        />
       </div>
 
       {/* Stylize */}

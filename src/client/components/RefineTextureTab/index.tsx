@@ -15,6 +15,7 @@ import type {
 } from '../../../shared/types';
 import { ProgressBar } from '../common/ProgressBar';
 import { ImageUpload } from '../common/ImageUpload';
+import { ModelSelector } from '../common/ModelSelector';
 
 type TextureInputMode = 'text' | 'image' | 'style_image';
 
@@ -280,21 +281,15 @@ export function RefineTextureTab() {
     value: number,
     onChange: (idx: number) => void,
   ) => (
-    <label style={styles.fieldLabel}>
-      {label}
-      <select
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={styles.select}
-      >
-        <option value={-1}>{t('selectModelOption')}</option>
-        {modelSteps.map((step, i) => (
-          <option key={i} value={i}>
-            {t(step.type)} ({step.taskId?.slice(0, 8)})
-          </option>
-        ))}
-      </select>
-    </label>
+    <div>
+      <div style={styles.fieldLabel}>{label}</div>
+      <ModelSelector
+        steps={modelSteps}
+        selectedIdx={value}
+        onSelect={onChange}
+        emptyText={t('selectModelOption')}
+      />
+    </div>
   );
 
   return (

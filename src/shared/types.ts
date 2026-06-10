@@ -331,7 +331,7 @@ export interface CompInfo {
 // === AE Animation Presets ===
 
 export type CameraPreset = 'orbit' | 'push' | 'track' | 'jib';
-export type ModelPreset = 'fade-in' | 'scale-pop' | 'flip' | 'slide-in';
+export type ModelPreset = 'fade-in' | 'scale-pop' | 'elastic-pop' | 'flip' | 'slide-in';
 export type EasingType = 'linear' | 'ease-in-out' | 'bounce' | 'elastic';
 export type LoopType = 'spin' | 'float' | 'breathe';
 
@@ -379,6 +379,7 @@ export interface ImportConfig {
   centerInComp?: boolean;
   enableTimeRemap?: boolean;
   selectEmbeddedAnim?: number;
+  loopAnimation?: boolean;
 }
 
 export interface EnvironmentLightConfig {

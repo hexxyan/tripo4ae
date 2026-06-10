@@ -7,11 +7,17 @@ import { getActiveComp, getProjectDir } from "./aeft-utils";
 // --- Keyframe helpers ---
 
 function setKeyframe(property: any, time: number, value: any, easeIn?: any[], easeOut?: any[]): void {
-  property.setValueAtTime(time, value);
-  if (easeIn || easeOut) {
-    var idx = property.nearestKeyIndex(time);
-    if (easeIn) property.setTemporalEaseAtKey(idx, easeIn, easeIn);
-    if (easeOut) property.setTemporalEaseAtKey(idx, easeOut, easeOut);
+  try {
+    if (property && property.canSetValue) {
+      property.setValueAtTime(time, value);
+      if (easeIn || easeOut) {
+        var idx = property.nearestKeyIndex(time);
+        if (easeIn) property.setTemporalEaseAtKey(idx, easeIn, easeIn);
+        if (easeOut) property.setTemporalEaseAtKey(idx, easeOut, easeOut);
+      }
+    }
+  } catch (e) {
+    // Ignore to prevent After Effects scripting popup errors and freezes
   }
 }
 
@@ -87,33 +93,76 @@ var FALLOFF_INVERSE_SQUARED = 3;
 
 // --- Material presets (PBR SOP) ---
 var MATERIAL_PRESETS: any = {
-  plastic: { ambient: 0, diffuse: 0.8, specularIntensity: 0.5, specularShininess: 0.1, metal: 0, reflectionIntensity: 0.05, transparency: 0 },
-  metal: { ambient: 0, diffuse: 0.4, specularIntensity: 0.9, specularShininess: 0.8, metal: 1, reflectionIntensity: 0.8, reflectionSharpness: 0.9, transparency: 0 },
-  glass: { ambient: 0, diffuse: 0.1, specularIntensity: 0.9, specularShininess: 0.9, metal: 0, reflectionIntensity: 0.5, transparency: 0.85, transparencyRolloff: 0.5, indexOrRefraction: 1.5, lightTransmission: 0.9 },
-  gold: { ambient: 0, diffuse: 0.5, specularIntensity: 0.95, specularShininess: 0.85, metal: 1, reflectionIntensity: 0.9, reflectionSharpness: 0.95, reflectionRolloff: 0.8, transparency: 0 },
-  matte: { ambient: 0.1, diffuse: 0.9, specularIntensity: 0, specularShininess: 0, metal: 0, reflectionIntensity: 0, transparency: 0 },
-  ceramic: { ambient: 0, diffuse: 0.7, specularIntensity: 0.6, specularShininess: 0.4, metal: 0, reflectionIntensity: 0.3, reflectionSharpness: 0.7, transparency: 0 },
-  rubber: { ambient: 0, diffuse: 0.9, specularIntensity: 0.15, specularShininess: 0.05, metal: 0, reflectionIntensity: 0.02, transparency: 0 },
-  crystal: { ambient: 0, diffuse: 0.05, specularIntensity: 1, specularShininess: 0.95, metal: 0, reflectionIntensity: 0.6, reflectionSharpness: 0.95, transparency: 0.9, transparencyRolloff: 0.3, indexOrRefraction: 2.0, lightTransmission: 0.95 },
+  plastic: { ambient: 0, diffuse: 80, specularIntensity: 50, specularShininess: 10, metal: 0, reflectionIntensity: 5, transparency: 0 },
+  metal: { ambient: 0, diffuse: 40, specularIntensity: 90, specularShininess: 80, metal: 100, reflectionIntensity: 80, reflectionSharpness: 90, transparency: 0 },
+  glass: { ambient: 0, diffuse: 10, specularIntensity: 90, specularShininess: 90, metal: 0, reflectionIntensity: 50, transparency: 85, transparencyRolloff: 50, indexOrRefraction: 1.5, lightTransmission: 90 },
+  gold: { ambient: 0, diffuse: 50, specularIntensity: 95, specularShininess: 85, metal: 100, reflectionIntensity: 90, reflectionSharpness: 95, reflectionRolloff: 80, transparency: 0 },
+  matte: { ambient: 10, diffuse: 90, specularIntensity: 0, specularShininess: 0, metal: 0, reflectionIntensity: 0, transparency: 0 },
+  ceramic: { ambient: 0, diffuse: 70, specularIntensity: 60, specularShininess: 40, metal: 0, reflectionIntensity: 30, reflectionSharpness: 70, transparency: 0 },
+  rubber: { ambient: 0, diffuse: 90, specularIntensity: 15, specularShininess: 5, metal: 0, reflectionIntensity: 2, transparency: 0 },
+  crystal: { ambient: 0, diffuse: 5, specularIntensity: 100, specularShininess: 95, metal: 0, reflectionIntensity: 60, reflectionSharpness: 95, transparency: 90, transparencyRolloff: 30, indexOrRefraction: 2.0, lightTransmission: 95 },
 };
 
 // --- Advanced 3D renderer match names ---
 
-var ADVANCED_3D_RENDERERS = ["ADBE Advanced 3d", "ADBE Mercury 3D Engine"];
+function isAdvanced3DName(name: string): boolean {
+  var lower = name.toLowerCase();
+  
+  // CRITICAL: "ADBE Advanced 3d" is the internal match name for Classic 3D!
+  if (name === "ADBE Advanced 3d" || lower === "adbe advanced 3d") {
+    return false;
+  }
+
+  if (lower.indexOf("classic") !== -1 || lower.indexOf("经典") !== -1 || lower.indexOf("clásico") !== -1 || lower.indexOf("classique") !== -1 || lower.indexOf("klassisch") !== -1) {
+    return false;
+  }
+  if (lower.indexOf("cinema") !== -1 || lower.indexOf("c4d") !== -1 || lower.indexOf("ernst") !== -1) {
+    return false;
+  }
+  if (lower.indexOf("advanced") !== -1 || 
+      lower.indexOf("calder") !== -1 || 
+      lower.indexOf("mercury") !== -1 || 
+      lower.indexOf("高级") !== -1 || 
+      lower.indexOf("高度") !== -1 || 
+      lower.indexOf("avanzado") !== -1 || 
+      lower.indexOf("avancée") !== -1 || 
+      lower.indexOf("erweitertes") !== -1 || 
+      lower.indexOf("engine") !== -1) {
+    return true;
+  }
+  return false;
+}
 
 function ensureAdvanced3DRenderer(comp: any): boolean {
   try {
-    var current = comp.renderer;
-    for (var i = 0; i < ADVANCED_3D_RENDERERS.length; i++) {
-      if (current === ADVANCED_3D_RENDERERS[i]) return true;
+    var before = String(comp.renderer);
+    if (isAdvanced3DName(before)) return true;
+
+    // 1. Scan available renderers in composition for localized name
+    if (comp.renderers && comp.renderers.length) {
+      for (var k = 0; k < comp.renderers.length; k++) {
+        var rName = String(comp.renderers[k]);
+        if (isAdvanced3DName(rName)) {
+          try {
+            comp.renderer = rName;
+            if (isAdvanced3DName(String(comp.renderer))) return true;
+          } catch (e) {}
+        }
+      }
     }
-    for (var j = 0; j < ADVANCED_3D_RENDERERS.length; j++) {
+
+    // 2. Direct assignment fallbacks
+    var fallbacks = ["ADBE Calder", "ADBE Mercury 3D Engine", "ADBE Mercury 3D", "Advanced 3D", "高级 3D", "高度な 3D"];
+    for (var j = 0; j < fallbacks.length; j++) {
       try {
-        comp.renderer = ADVANCED_3D_RENDERERS[j];
-        return true;
+        comp.renderer = fallbacks[j];
+        if (isAdvanced3DName(String(comp.renderer))) return true;
       } catch (e) {}
     }
-  } catch (e) {}
+    $.writeln("[Tripo4AE] ensureAdvanced3DRenderer failed: before=[" + before + "] after=[" + String(comp.renderer) + "]");
+  } catch (e) {
+    $.writeln("[Tripo4AE] ensureAdvanced3DRenderer error: " + String(e));
+  }
   return false;
 }
 
@@ -242,6 +291,15 @@ export function importModel(modelPath: string, configJson?: string): string {
 
     // Make 3D
     try { layer.threeDLayer = true; } catch (e) {}
+
+    // Enable Casts Shadows by default
+    try {
+      var matOpts = layer.property("ADBE Material Options Group");
+      if (matOpts) {
+        var castsShadowsProp = matOpts.property("ADBE Casts Shadows") || matOpts.property("Casts Shadows") || matOpts.property(1);
+        if (castsShadowsProp && castsShadowsProp.canSetValue) castsShadowsProp.setValue(1);
+      }
+    } catch (e) {}
 
     // Center in comp
     if (config.centerInComp && layer.position) {
@@ -450,10 +508,50 @@ export function createCamera(configJson: string): string {
       return JSON.stringify({ ok: false, error: "No active composition" });
     }
 
+    // Check if camera and control layers already exist
+    var cameraLayer = null;
+    var nullLayer = null;
+    for (var l = comp.numLayers; l >= 1; l--) {
+      var lyr = comp.layer(l);
+      if (lyr.name === "Tripo4AE_Camera") {
+        cameraLayer = lyr;
+      } else if (lyr.name === "Tripo4AE_CameraCtrl") {
+        nullLayer = lyr;
+      }
+    }
+
     var radius = config.radius || 500;
     var duration = config.duration || 5;
-    var cameraLayer = comp.layers.addCamera("Tripo4AE_Camera", [comp.width / 2, comp.height / 2]);
-    cameraLayer.property("Position").setValue([comp.width / 2, comp.height / 2, -radius]);
+    var cx = comp.width / 2;
+    var cy = comp.height / 2;
+
+    // Reuse or Create the 3D Null Object for Camera Control
+    if (!nullLayer) {
+      nullLayer = comp.layers.addNull();
+      nullLayer.name = "Tripo4AE_CameraCtrl";
+      nullLayer.threeDLayer = true;
+      nullLayer.property("Position").setValue([cx, cy, 0]);
+      try { nullLayer.property("Scale").setValue([380, 380, 380]); } catch (e) {}
+      try { nullLayer.property("Orientation").setValue([0, 300, 0]); } catch (e) {}
+    } else {
+      nullLayer.threeDLayer = true;
+      nullLayer.property("Position").setValue([cx, cy, 0]);
+      try { nullLayer.property("Scale").setValue([380, 380, 380]); } catch (e) {}
+      try { nullLayer.property("Orientation").setValue([0, 300, 0]); } catch (e) {}
+    }
+
+    // Reuse or Create the Camera
+    if (!cameraLayer) {
+      cameraLayer = comp.layers.addCamera("Tripo4AE_Camera", [cx, cy]);
+    }
+    cameraLayer.parent = nullLayer;
+
+    // Set Camera Local Position & Point of Interest relative to the Null
+    cameraLayer.property("Position").setValue([0, 0, -radius]);
+    var poiProp = cameraLayer.property("Point of Interest");
+    if (poiProp && poiProp.canSetValue) {
+      try { poiProp.setValue([0, 0, 0]); } catch (e) {}
+    }
 
     // Camera Options via match names
     var camGroup = cameraLayer.property(CAM_GROUP);
@@ -487,72 +585,91 @@ export function createCamera(configJson: string): string {
       }
     }
 
-    var cx = comp.width / 2;
-    var cy = comp.height / 2;
-
     switch (config.preset) {
       case "orbit": {
-        var pointOfInterest = cameraLayer.property("Point of Interest");
-        var position = cameraLayer.property("Position");
-        var numKeyframes = 36;
-        for (var i = 0; i <= numKeyframes; i++) {
-          var t = (i / numKeyframes) * duration;
-          var angle = (i / numKeyframes) * 2 * Math.PI;
-          setKeyframe(position, t, [cx + radius * Math.cos(angle), cy, radius * Math.sin(angle)]);
-          setKeyframe(pointOfInterest, t, [cx, cy, 0]);
+        // Simple and elegant: animate Y Rotation of the parent Null layer!
+        var nullRotY = nullLayer.property("Y Rotation");
+        if (nullRotY) {
+          while (nullRotY.numKeys > 0) nullRotY.removeKey(1);
+          setKeyframe(nullRotY, 0, 0);
+          setKeyframe(nullRotY, duration, 360);
         }
         break;
       }
       case "push": {
-        var pos = cameraLayer.property("Position");
-        setKeyframe(pos, 0, [cx, cy, -(radius * 3)]);
-        setKeyframe(pos, duration, [cx, cy, -(radius * 0.5)]);
+        // Clear old keyframes and animate local camera Z position (dolly in/out)
+        var camPos = cameraLayer.property("Position");
+        if (camPos) {
+          while (camPos.numKeys > 0) camPos.removeKey(1);
+          setKeyframe(camPos, 0, [0, 0, -(radius * 3)]);
+          setKeyframe(camPos, duration, [0, 0, -(radius * 0.5)]);
+        }
         break;
       }
       case "track": {
+        // Clear old keyframes and animate Null position (pan/truck)
         var offset = config.offset || 400;
-        var posTrack = cameraLayer.property("Position");
-        setKeyframe(posTrack, 0, [cx - offset, cy, -radius]);
-        setKeyframe(posTrack, duration, [cx + offset, cy, -radius]);
+        var nullPos = nullLayer.property("Position");
+        if (nullPos) {
+          while (nullPos.numKeys > 0) nullPos.removeKey(1);
+          setKeyframe(nullPos, 0, [cx - offset, cy, 0]);
+          setKeyframe(nullPos, duration, [cx + offset, cy, 0]);
+        }
         break;
       }
       case "jib": {
+        // Clear old keyframes and animate Null position vertically (pedestal/boom)
         var offsetJib = config.offset || 300;
-        var posJib = cameraLayer.property("Position");
-        var poiJib = cameraLayer.property("Point of Interest");
-        setKeyframe(posJib, 0, [cx, cy + offsetJib, -radius]);
-        setKeyframe(posJib, duration, [cx, cy - offsetJib, -radius]);
-        setKeyframe(poiJib, 0, [cx, cy, 0]);
-        setKeyframe(poiJib, duration, [cx, cy, 0]);
+        var nullPosJib = nullLayer.property("Position");
+        if (nullPosJib) {
+          while (nullPosJib.numKeys > 0) nullPosJib.removeKey(1);
+          setKeyframe(nullPosJib, 0, [cx, cy + offsetJib, 0]);
+          setKeyframe(nullPosJib, duration, [cx, cy - offsetJib, 0]);
+        }
         break;
       }
       case "dolly-zoom": {
-        // Vertigo effect: move camera in while zooming out (or vice versa)
-        var poi = cameraLayer.property("Point of Interest");
-        var posDz = cameraLayer.property("Position");
-        poi.setValue([cx, cy, 0]);
+        // Vertigo effect: move camera in while zooming out
         var startZoom = config.startZoom || 200;
         var endZoom = config.endZoom || 800;
         try {
-          camGroup.property(CAM_MAP.zoom).setValueAtTime(0, startZoom);
-          camGroup.property(CAM_MAP.zoom).setValueAtTime(duration, endZoom);
+          var zoomProp = camGroup.property(CAM_MAP.zoom);
+          if (zoomProp) {
+            while (zoomProp.numKeys > 0) zoomProp.removeKey(1);
+            if (zoomProp.canSetValue) {
+              zoomProp.setValueAtTime(0, startZoom);
+              zoomProp.setValueAtTime(duration, endZoom);
+            }
+          }
         } catch (e) {}
-        setKeyframe(posDz, 0, [cx, cy, -(radius * 2)]);
-        setKeyframe(posDz, duration, [cx, cy, -(radius * 0.4)]);
+        var camPosDz = cameraLayer.property("Position");
+        if (camPosDz) {
+          while (camPosDz.numKeys > 0) camPosDz.removeKey(1);
+          setKeyframe(camPosDz, 0, [0, 0, -(radius * 2)]);
+          setKeyframe(camPosDz, duration, [0, 0, -(radius * 0.4)]);
+        }
         break;
       }
       case "crane": {
-        // Multi-axis crane: rise + orbit + push
-        var poiCrane = cameraLayer.property("Point of Interest");
-        var posCrane = cameraLayer.property("Position");
-        var craneSteps = 24;
-        for (var ci = 0; ci <= craneSteps; ci++) {
-          var ct = (ci / craneSteps) * duration;
-          var ca = (ci / craneSteps) * Math.PI * 1.5;
-          var cr = radius * (1.5 - ci / craneSteps);
-          var cyOff = -200 + 400 * (ci / craneSteps);
-          setKeyframe(posCrane, ct, [cx + cr * Math.cos(ca), cy + cyOff, cr * Math.sin(ca)]);
-          setKeyframe(poiCrane, ct, [cx, cy, 0]);
+        // Compound crane shot using both Null and Camera local coordinates
+        var nullPosCrane = nullLayer.property("Position");
+        var nullRotYCrane = nullLayer.property("Y Rotation");
+        var camPosCrane = cameraLayer.property("Position");
+
+        if (nullPosCrane) {
+          while (nullPosCrane.numKeys > 0) nullPosCrane.removeKey(1);
+          setKeyframe(nullPosCrane, 0, [cx, cy + 200, 0]);
+          setKeyframe(nullPosCrane, duration, [cx, cy - 200, 0]);
+        }
+        if (nullRotYCrane) {
+          while (nullRotYCrane.numKeys > 0) nullRotYCrane.removeKey(1);
+          setKeyframe(nullRotYCrane, 0, 0);
+          setKeyframe(nullRotYCrane, duration, 270);
+        }
+        if (camPosCrane) {
+          while (camPosCrane.numKeys > 0) camPosCrane.removeKey(1);
+          setKeyframe(camPosCrane, 0, [0, 0, -(radius * 1.5)]);
+          setKeyframe(camPosCrane, duration, [0, 0, -(radius * 0.5)]);
         }
         break;
       }
@@ -772,28 +889,58 @@ export function createEnvironmentLight(configJson?: string): string {
       lightLayer.property("Color").setValue(config.color);
     }
 
-    // Try to set as environment light type (AE 2025+)
+    // Set light type: Environment (5) if HDR path present, else Ambient (4) (or fallback to Ambient)
+    var isEnv = !!config.hdrPath;
     try {
-      var lightOptions = lightLayer.property("ADBE Light Options Group");
-      if (lightOptions) {
-        try { lightOptions.property("ADBE Light Type").setValue(5); } catch (e) {}
+      if (isEnv && typeof LightType !== "undefined" && LightType.ENVIRONMENT !== undefined) {
+        lightLayer.lightType = LightType.ENVIRONMENT;
+      } else if (!isEnv && typeof LightType !== "undefined" && LightType.AMBIENT !== undefined) {
+        lightLayer.lightType = LightType.AMBIENT;
+      } else {
+        var lightOptions = lightLayer.property("ADBE Light Options Group");
+        if (lightOptions) {
+          lightOptions.property("ADBE Light Type").setValue(isEnv ? 5 : 4);
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      try {
+        var lightOptions = lightLayer.property("ADBE Light Options Group");
+        if (lightOptions) {
+          lightOptions.property("ADBE Light Type").setValue(isEnv ? 5 : 4);
+        }
+      } catch (err) {}
+    }
 
     // Try to set HDRI
     if (config.hdrPath) {
       try {
         var hdrFile = new File(config.hdrPath);
         if (hdrFile.exists) {
+          // Remove existing Tripo4AE_EnvMap layer if it exists
+          for (var l = comp.numLayers; l >= 1; l--) {
+            var lyr = comp.layer(l);
+            if (lyr.name === "Tripo4AE_EnvMap") {
+              try { lyr.remove(); } catch (e) {}
+            }
+          }
+
           var io = new ImportOptions(hdrFile);
           var hdrFootage = app.project.importFile(io);
+          var hdrLayer = comp.layers.add(hdrFootage);
+          hdrLayer.name = "Tripo4AE_EnvMap";
+          hdrLayer.enabled = false; // Disable eyeball
+
           try {
-            var envImage = lightLayer.property("ADBE Environment Light Options Group") || lightLayer.property("ADBE Light Options Group");
-            if (envImage) {
-              var imgProp = envImage.property("ADBE Environment Image") || envImage.property("ADBE Light Image");
-              if (imgProp) imgProp.setValue(hdrFootage);
-            }
-          } catch (e) {}
+            lightLayer.lightSource = hdrLayer;
+          } catch (e) {
+            try {
+              var envImage = lightLayer.property("ADBE Environment Light Options Group") || lightLayer.property("ADBE Light Options Group");
+              if (envImage) {
+                var imgProp = envImage.property("ADBE Environment Image") || envImage.property("ADBE Light Image");
+                if (imgProp) imgProp.setValue(hdrLayer);
+              }
+            } catch (err) {}
+          }
         }
       } catch (e) {}
     }
@@ -892,10 +1039,29 @@ export function setupScene(configJson?: string): string {
     var cy = comp.height / 2;
     var dist = Math.max(comp.width, comp.height);
 
-    // 2. Camera
+    // 2. Camera Rig (Camera parented to 3D Null for easy control)
+    // Clean up existing camera and control layers first to prevent duplicates
+    for (var l = comp.numLayers; l >= 1; l--) {
+      var lyr = comp.layer(l);
+      if (lyr.name === "Tripo4AE_Camera" || lyr.name === "Tripo4AE_CameraCtrl") {
+        try { lyr.remove(); } catch (e) {}
+      }
+    }
+
+    var nullLayer = comp.layers.addNull();
+    nullLayer.name = "Tripo4AE_CameraCtrl";
+    nullLayer.threeDLayer = true;
+    nullLayer.property("Position").setValue([cx, cy, 0]);
+    try { nullLayer.property("Scale").setValue([380, 380, 380]); } catch (e) {}
+    try { nullLayer.property("Orientation").setValue([0, 300, 0]); } catch (e) {}
+
     var cameraLayer = comp.layers.addCamera("Tripo4AE_Camera", [cx, cy]);
-    cameraLayer.property("Position").setValue([cx, cy, -(config.cameraDistance || 800)]);
-    cameraLayer.property("Point of Interest").setValue([cx, cy, 0]);
+    cameraLayer.parent = nullLayer;
+    cameraLayer.property("Position").setValue([0, 0, -(config.cameraDistance || 800)]);
+    var poiProp = cameraLayer.property("Point of Interest");
+    if (poiProp && poiProp.canSetValue) {
+      try { poiProp.setValue([0, 0, 0]); } catch (e) {}
+    }
     var camGroup = cameraLayer.property(CAM_GROUP);
     if (camGroup) {
       try { camGroup.property(CAM_MAP.depthOfField).setValue(config.depthOfField !== false ? 1 : 0); } catch (e) {}
@@ -948,14 +1114,129 @@ export function setupScene(configJson?: string): string {
             try { envLightGroup.property(LIGHT_MAP.falloffType).setValue(FALLOFF_NONE); } catch (e) {}
           }
         } catch (e) {}
-        // Try environment light type (AE 2025+)
+
+        // Set light type: Environment (5) if HDR path present, else Ambient (4)
+        var isEnv = !!config.hdrPath;
         try {
-          var lightOpts = envLayer.property("ADBE Light Options Group");
-          if (lightOpts) { try { lightOpts.property("ADBE Light Type").setValue(5); } catch (e) {} }
-        } catch (e) {}
+          if (isEnv && typeof LightType !== "undefined" && LightType.ENVIRONMENT !== undefined) {
+            envLayer.lightType = LightType.ENVIRONMENT;
+          } else if (!isEnv && typeof LightType !== "undefined" && LightType.AMBIENT !== undefined) {
+            envLayer.lightType = LightType.AMBIENT;
+          } else {
+            var lightOpts = envLayer.property("ADBE Light Options Group");
+            if (lightOpts) {
+              lightOpts.property("ADBE Light Type").setValue(isEnv ? 5 : 4);
+            }
+          }
+        } catch (e) {
+          try {
+            var lightOpts = envLayer.property("ADBE Light Options Group");
+            if (lightOpts) {
+              lightOpts.property("ADBE Light Type").setValue(isEnv ? 5 : 4);
+            }
+          } catch (err) {}
+        }
+
+        // Load HDR if present
+        if (config.hdrPath) {
+          try {
+            var hdrFile = new File(config.hdrPath);
+            if (hdrFile.exists) {
+              // Remove existing Tripo4AE_EnvMap layer if it exists
+              for (var l = comp.numLayers; l >= 1; l--) {
+                var lyr = comp.layer(l);
+                if (lyr.name === "Tripo4AE_EnvMap") {
+                  try { lyr.remove(); } catch (e) {}
+                }
+              }
+
+              var io = new ImportOptions(hdrFile);
+              var hdrFootage = app.project.importFile(io);
+              var hdrLayer = comp.layers.add(hdrFootage);
+              hdrLayer.name = "Tripo4AE_EnvMap";
+              hdrLayer.enabled = false; // Disable eyeball
+
+              try {
+                envLayer.lightSource = hdrLayer;
+              } catch (e) {
+                try {
+                  var envImage = envLayer.property("ADBE Environment Light Options Group") || envLayer.property("ADBE Light Options Group");
+                  if (envImage) {
+                    var imgProp = envImage.property("ADBE Environment Image") || envImage.property("ADBE Light Image");
+                    if (imgProp) imgProp.setValue(hdrLayer);
+                  }
+                } catch (err) {}
+              }
+            }
+          } catch (e) {}
+        }
+
         envLightCreated = true;
       } catch (e) {}
     }
+
+    // 5. Create professional Studio Background & Shadow Catcher Ground (One-click premium background)
+    try {
+      // Remove existing Tripo4AE background and ground layers if they exist
+      for (var l = comp.numLayers; l >= 1; l--) {
+        var lyr = comp.layer(l);
+        if (lyr.name === "Tripo4AE_Background" || lyr.name === "Tripo4AE_Ground") {
+          try { lyr.remove(); } catch (e) {}
+        }
+      }
+
+      // Create 2D Background Solid with Gradient (premium light silver/grey vignette)
+      var bgLayer = comp.layers.addSolid([0.95, 0.96, 0.98], "Tripo4AE_Background", comp.width, comp.height, 1.0);
+      bgLayer.moveToEnd(); // Move to the bottom of the layer stack
+
+      // Apply ADBE Ramp (Gradient)
+      try {
+        var ramp = bgLayer.Effects.addProperty("ADBE Ramp");
+        if (ramp) {
+          var shapeProp = ramp.property("ADBE Ramp-0005") || ramp.property(5);
+          if (shapeProp) shapeProp.setValue(2); // Radial
+          
+          var startProp = ramp.property("ADBE Ramp-0001") || ramp.property(1);
+          if (startProp) startProp.setValue([comp.width / 2, comp.height / 2]);
+          
+          var endProp = ramp.property("ADBE Ramp-0003") || ramp.property(3);
+          if (endProp) endProp.setValue([comp.width * 0.9, comp.height * 0.1]);
+          
+          var startColProp = ramp.property("ADBE Ramp-0002") || ramp.property(2);
+          if (startColProp) startColProp.setValue([0.95, 0.96, 0.98]); // Soft pearl white
+          
+          var endColProp = ramp.property("ADBE Ramp-0004") || ramp.property(4);
+          if (endColProp) endColProp.setValue([0.75, 0.76, 0.80]); // Light silver grey
+        }
+      } catch (e) {}
+
+      // Create 3D Ground Shadow Catcher Solid
+      var groundLayer = comp.layers.addSolid([0.5, 0.5, 0.5], "Tripo4AE_Ground", 3000, 3000, 1.0);
+      groundLayer.threeDLayer = true;
+      
+      // Orient flat (X Rotation = 90)
+      var groundRotX = groundLayer.property("X Rotation") || groundLayer.property("ADBE Rotate X");
+      if (groundRotX) {
+        try { groundRotX.setValue(90); } catch (e) {}
+      }
+      
+      // Position below the model
+      var groundPos = groundLayer.property("Position") || groundLayer.property("ADBE Position");
+      if (groundPos) {
+        try { groundPos.setValue([comp.width / 2, comp.height / 2 + 250, 0]); } catch (e) {}
+      }
+      
+      // Enable shadow catching (Shadows Only)
+      var groundMat = groundLayer.property("ADBE Material Options Group");
+      if (groundMat) {
+        try {
+          var acceptsShadowsProp = groundMat.property("ADBE Accepts Shadows") || groundMat.property(2);
+          if (acceptsShadowsProp) {
+            acceptsShadowsProp.setValue(2); // Shadows Only
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
 
     app.endUndoGroup();
 

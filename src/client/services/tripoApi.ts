@@ -54,11 +54,7 @@ export class TripoApiService {
     return response.data;
   }
 
-  /**
-   * Download model from URL to local disk via CEP Node.js.
-   * Returns local file path.
-   */
-  async downloadModel(url: string, savePath: string): Promise<string> {
+  async downloadModel(url: string, savePath: string, onProgress?: (bytesReceived: number, totalBytes: number) => void): Promise<string> {
     const fs = getNodeFs();
     const nodePath = getNodePath();
 
@@ -71,7 +67,6 @@ export class TripoApiService {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    // Determine if we are inside the CEP context with Node.js modules
     const isCep = typeof window !== 'undefined' && (window as any).cep;
 
     if (isCep) {
@@ -89,9 +84,10 @@ export class TripoApiService {
               const parsedUrl = new URL(targetUrl);
               const protocol = parsedUrl.protocol === 'https:' ? https : http;
 
+              console.log(`[Tripo4AE] Downloading: ${parsedUrl.host}${parsedUrl.pathname} (redirect ${redirectCount})`);
+
               const requestOptions = {
-                timeout: 45000, // 45 seconds timeout
-                // Bypass SSL certificate checks if behind a proxy/firewall that intercepts certificates
+                timeout: 60000,
                 rejectUnauthorized: false,
                 headers: {
                   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -102,40 +98,91 @@ export class TripoApiService {
                 // Handle HTTP Redirects (301, 302, 303, 307, 308)
                 if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                   const redirectUrl = new URL(res.headers.location, targetUrl).toString();
+                  console.log(`[Tripo4AE] Redirect ${res.statusCode} -> ${redirectUrl}`);
                   resolve(downloadWithNode(redirectUrl, redirectCount + 1));
                   return;
                 }
 
                 if (res.statusCode !== 200) {
-                  reject(new Error(`Failed to download model: HTTP status ${res.statusCode}`));
+                  const errMsg = `Download failed: HTTP ${res.statusCode}`;
+                  console.error(`[Tripo4AE] ${errMsg}`, res.headers);
+                  reject(new Error(errMsg));
                   return;
                 }
 
+                const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
+                console.log(`[Tripo4AE] Response OK, Content-Length: ${totalBytes || 'unknown'} bytes`);
+
                 const fileStream = fs.createWriteStream(savePath);
+                let bytesReceived = 0;
+                let lastProgressLog = 0;
+
                 res.pipe(fileStream);
 
-                fileStream.on('finish', () => {
+                // Inactivity timeout — reset on every data chunk
+                let downloadTimeout = setTimeout(() => {
+                  console.error(`[Tripo4AE] Download stalled after ${bytesReceived} bytes`);
+                  res.destroy();
                   fileStream.close();
+                  fs.unlink(savePath, () => {});
+                  reject(new Error(`Download stalled: no data for 60s (${bytesReceived} bytes received)`));
+                }, 60000);
+
+                res.on('data', (chunk: Buffer) => {
+                  bytesReceived += chunk.length;
+                  clearTimeout(downloadTimeout);
+                  downloadTimeout = setTimeout(() => {
+                    console.error(`[Tripo4AE] Download stalled at ${bytesReceived}/${totalBytes || '?'} bytes`);
+                    res.destroy();
+                    fileStream.close();
+                    fs.unlink(savePath, () => {});
+                    reject(new Error(`Download stalled: no data for 60s (${bytesReceived} bytes received)`));
+                  }, 60000);
+
+                  if (onProgress) onProgress(bytesReceived, totalBytes);
+
+                  // Log progress every 1MB or at 10% intervals
+                  if (totalBytes > 0) {
+                    const pct = Math.floor((bytesReceived / totalBytes) * 100);
+                    if (pct - lastProgressLog >= 10) {
+                      lastProgressLog = pct;
+                      console.log(`[Tripo4AE] Download progress: ${pct}% (${bytesReceived}/${totalBytes})`);
+                    }
+                  } else if (bytesReceived - lastProgressLog > 1048576) {
+                    lastProgressLog = bytesReceived;
+                    console.log(`[Tripo4AE] Download progress: ${(bytesReceived / 1048576).toFixed(1)} MB`);
+                  }
+                });
+
+                fileStream.on('finish', () => {
+                  clearTimeout(downloadTimeout);
+                  fileStream.close();
+                  console.log(`[Tripo4AE] Download complete: ${savePath} (${bytesReceived} bytes)`);
                   resolve(savePath);
                 });
 
                 fileStream.on('error', (err: any) => {
-                  fs.unlink(savePath, () => {}); // Delete the partial file on error
+                  clearTimeout(downloadTimeout);
+                  console.error(`[Tripo4AE] File write error:`, err);
+                  fs.unlink(savePath, () => {});
                   reject(err);
                 });
               });
 
               req.on('timeout', () => {
+                console.error(`[Tripo4AE] Connection timed out (60s)`);
                 req.destroy();
                 fs.unlink(savePath, () => {});
-                reject(new Error('Download request timed out (45s)'));
+                reject(new Error('Download connection timed out (60s)'));
               });
 
               req.on('error', (err: any) => {
+                console.error(`[Tripo4AE] Download request error:`, err.message);
                 fs.unlink(savePath, () => {});
-                reject(err);
+                reject(new Error(`Download network error: ${err.message}`));
               });
-            } catch (urlErr) {
+            } catch (urlErr: any) {
+              console.error(`[Tripo4AE] Download setup error:`, urlErr);
               reject(urlErr);
             }
           });
@@ -144,8 +191,7 @@ export class TripoApiService {
         try {
           return await downloadWithNode(url);
         } catch (err: any) {
-          console.warn('Node.js download failed, falling back to fetch:', err);
-          // Fallback to fetch below
+          console.error('[Tripo4AE] Node.js download failed, falling back to fetch:', err.message);
         }
       }
     }
@@ -167,11 +213,14 @@ export class TripoApiService {
    * Uses pbr_model > model > base_model priority.
    * Returns local file path.
    */
-  async downloadTaskResult(task: TripoTask, saveDir: string): Promise<string> {
+  async downloadTaskResult(task: TripoTask, saveDir: string, onProgress?: (bytesReceived: number, totalBytes: number) => void): Promise<string> {
     const url = this.getModelUrl(task.output);
     if (!url) {
+      console.error(`[Tripo4AE] No model URL in task ${task.task_id}. output keys:`, Object.keys(task.output || {}));
       throw new Error(`No model URL found in task ${task.task_id} output`);
     }
+
+    console.log(`[Tripo4AE] downloadTaskResult: task=${task.task_id} url=${url.substring(0, 80)}...`);
 
     const nodePath = getNodePath();
     const urlPath = new URL(url).pathname;
@@ -179,7 +228,7 @@ export class TripoApiService {
     const fileName = `${task.task_id}${ext}`;
     const savePath = nodePath ? nodePath.join(saveDir, fileName) : `${saveDir}/${fileName}`;
 
-    return this.downloadModel(url, savePath);
+    return this.downloadModel(url, savePath, onProgress);
   }
 
   /**

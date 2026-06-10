@@ -48,11 +48,15 @@ const getAppNameSafely = (): string => {
   return "unknown";
 };
 
-switch (getAppNameSafely()) {
-  case "aftereffects":
-  case "aftereffectsbeta":
-    host[ns] = aeft;
-    // Register as global `tripo4ae` for direct evalScript access
-    host["tripo4ae"] = aeft;
-    break;
+// Unconditionally register namespaces for direct evalScript access
+host[ns] = aeft;
+host["tripo4ae"] = aeft;
+
+if (typeof $ !== "undefined") {
+  $[ns] = aeft;
+  $["tripo4ae"] = aeft;
+  if ($.global) {
+    $.global[ns] = aeft;
+    $.global["tripo4ae"] = aeft;
+  }
 }

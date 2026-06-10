@@ -59,10 +59,15 @@ export class TripoHttpClient {
         body: JSON.stringify(body),
       });
 
-      if (response.status === 429 && attempt < maxRetries) {
-        const backoff = baseDelay * Math.pow(2, attempt);
-        await this.delay(backoff);
-        continue;
+      if (response.status === 429) {
+        const err = new Error('HTTP 429: Too Many Requests') as TripoError;
+        err.status = 429;
+        lastError = err;
+        if (attempt < maxRetries) {
+          const backoff = baseDelay * Math.pow(2, attempt);
+          await this.delay(backoff);
+          continue;
+        }
       }
 
       return this.handleResponse<T>(response);

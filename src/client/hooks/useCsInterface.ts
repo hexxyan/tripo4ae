@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
 import type { CompInfo, AnimationConfig, MaterialProperties, ImportConfig, EnvironmentLightConfig, EmbeddedAnimationConfig } from '../../shared/types';
 
-declare const CSInterface: any;
+import CSInterface from '../../js/lib/cep/csinterface';
 
 function escapeForEval(str: string): string {
   return str
@@ -11,9 +11,28 @@ function escapeForEval(str: string): string {
 
 let csInstance: any = null;
 
+function getCSInterfaceCtor(): any {
+  if (typeof CSInterface === 'function') return CSInterface;
+  if (typeof window !== 'undefined' && typeof (window as any).CSInterface === 'function') {
+    return (window as any).CSInterface;
+  }
+  return null;
+}
+
 function getCSInterface(): any {
+  if (typeof window === 'undefined' || typeof (window as any).__adobe_cep__ === 'undefined') {
+    throw new Error(
+      'After Effects CEP bridge unavailable (__adobe_cep__ missing). This is a host/panel issue, not a Tripo API issue. Reopen the panel inside After Effects.',
+    );
+  }
+  const CSInterfaceCtor = getCSInterfaceCtor();
+  if (!CSInterfaceCtor) {
+    throw new Error(
+      'CSInterface bridge unavailable in the current panel build. Rebuild the extension and reopen the After Effects panel.',
+    );
+  }
   if (!csInstance) {
-    csInstance = new CSInterface();
+    csInstance = new CSInterfaceCtor();
   }
   return csInstance;
 }
@@ -29,16 +48,31 @@ export function useCsInterface() {
   }, []);
 
   const evalScript = useCallback(<T = any,>(script: string): Promise<T> => {
-    const cs = getCS();
+    let cs: any;
+    try {
+      cs = getCS();
+    } catch (err) {
+      return Promise.reject(err);
+    }
+    const callId = Math.random().toString(36).slice(2, 8);
+    console.log(`[Tripo4AE] evalScript[${callId}]`, script.substring(0, 120) + (script.length > 120 ? '...' : ''));
     return new Promise<T>((resolve, reject) => {
       cs.evalScript(script, (result: string) => {
-        if (result === 'undefined' || result === undefined || result === null) {
-          resolve(undefined as T);
+        if (result === 'EvalScript error.' || result === 'EvalScript error') {
+          console.error(`[Tripo4AE] evalScript[${callId}] EvalScript error — function not found or syntax error`);
+          reject(new Error('ExtendScript evaluation failed. The JSX host script may not be loaded. Try restarting AE.'));
           return;
         }
+        if (result === 'undefined' || result === undefined || result === null || result === '') {
+          console.error(`[Tripo4AE] evalScript[${callId}] returned empty/undefined — ExtendScript function may not exist or threw`);
+          reject(new Error('ExtendScript returned no result. The function may not be registered. Try restarting AE.'));
+          return;
+        }
+        console.log(`[Tripo4AE] evalScript[${callId}] OK:`, result.substring(0, 200));
         try {
           const parsed = JSON.parse(result);
           if (parsed && parsed.ok === false) {
+            console.error(`[Tripo4AE] evalScript[${callId}] ExtendScript error:`, parsed.error);
             reject(new Error(parsed.error || 'ExtendScript error'));
           } else if (parsed && parsed.ok === true) {
             resolve(parsed.data as T);

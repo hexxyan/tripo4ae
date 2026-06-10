@@ -55,6 +55,7 @@ export function GenerateTab() {
   const models = useStore((s) => s.models);
   const upsertModel = useStore((s) => s.upsertModel);
   const pipeline = useStore((s) => s.pipeline);
+  const setBalance = useStore((s) => s.setBalance);
   const csInterface = useCsInterface();
   const { t } = useTranslation();
 
@@ -100,6 +101,20 @@ export function GenerateTab() {
   const nextStepIdx = useRef(pipeline.length);
   const resumedTaskRef = useRef<string | null>(null);
   const recoveringTaskRef = useRef<string | null>(null);
+  const attemptedImportsRef = useRef<Set<string>>(new Set());
+
+  const handleCancel = useCallback(() => {
+    setIsGenerating(false);
+    setIsImporting(false);
+    setProgress(0);
+    setStatusText('');
+    setError(null);
+    if (currentTaskId) {
+      attemptedImportsRef.current.add(currentTaskId);
+    }
+    recoveringTaskRef.current = null;
+    resumedTaskRef.current = null;
+  }, [currentTaskId]);
 
   const getApi = useCallback(() => {
     if (!apiKey) throw new Error(t('failedToConnect'));
@@ -179,20 +194,22 @@ export function GenerateTab() {
       let localPath = existingModel?.modelPath;
 
       if (!localPath || forceDownload) {
+        setProgress(0);
         setStatusText(workflow === 'element3d' ? `${t('statusDownloading')} (OBJ)...` : t('statusDownloading'));
-        localPath = await api.downloadTaskResult(taskToDownload, TripoApiService.getModelSaveDir());
-      }
-
-      if (workflow === 'element3d') {
-        setStatusText(t('statusCreatingE3D'));
-        await csInterface.setupE3D(localPath);
-      } else {
-        setStatusText(workflow === 'project_only' ? t('statusImportingProject') : t('statusImportingAE'));
-        await csInterface.importModel(localPath, {
-          addToComp: workflow !== 'project_only',
-          centerInComp: workflow === 'advanced3d',
-          enableTimeRemap: workflow === 'advanced3d',
-        });
+        localPath = await api.downloadTaskResult(
+          taskToDownload,
+          TripoApiService.getModelSaveDir(),
+          (bytes, total) => {
+            if (total > 0) {
+              const pct = Math.floor((bytes / total) * 100);
+              setProgress(pct);
+              setStatusText(workflow === 'element3d' ? `${t('statusDownloading')} (OBJ) ${pct}%` : `${t('statusDownloading')} ${pct}%`);
+            } else {
+              const mb = (bytes / 1048576).toFixed(1);
+              setStatusText(workflow === 'element3d' ? `${t('statusDownloading')} (OBJ) (${mb} MB)` : `${t('statusDownloading')} (${mb} MB)`);
+            }
+          }
+        );
       }
 
       const model: ModelRecord = {
@@ -208,6 +225,21 @@ export function GenerateTab() {
         pipelineSteps: [...useStore.getState().pipeline],
       };
       upsertModel(model);
+
+      if (workflow === 'element3d') {
+        setStatusText(t('statusCreatingE3D'));
+        console.log(`[Tripo4AE] setupE3D: ${localPath}`);
+        await csInterface.setupE3D(localPath);
+      } else {
+        setStatusText(workflow === 'project_only' ? t('statusImportingProject') : t('statusImportingAE'));
+        console.log(`[Tripo4AE] importModel: ${localPath} workflow=${workflow}`);
+        const importResult = await csInterface.importModel(localPath, {
+          addToComp: workflow !== 'project_only',
+          centerInComp: workflow === 'advanced3d',
+          enableTimeRemap: workflow === 'advanced3d',
+        });
+        console.log('[Tripo4AE] importModel result:', importResult);
+      }
       setStatusText(
         workflow === 'project_only'
           ? t('importedToProject')
@@ -253,6 +285,13 @@ export function GenerateTab() {
       setResultTask(result);
       setProgress(100);
       setStatusText(t('statusSuccess'));
+
+      try {
+        const api = getApi();
+        const balRes = await api.getBalance();
+        setBalance(balRes.balance);
+      } catch (e) {}
+
       updatePipelineStep(pipelineIndex, {
         status: 'success',
         output: result.output,
@@ -280,7 +319,7 @@ export function GenerateTab() {
         resumedTaskRef.current = null;
       }
     }
-  }, [getPoller, importTaskWithWorkflow, importWorkflow, updatePipelineStep, t]);
+  }, [getApi, getPoller, importTaskWithWorkflow, importWorkflow, setBalance, updatePipelineStep, t]);
 
   useEffect(() => {
     if (!apiKey || isGenerating || isImporting) return;
@@ -324,7 +363,8 @@ export function GenerateTab() {
         step.taskId &&
         RESUMABLE_GENERATE_TYPES.has(step.type) &&
         step.status === 'success' &&
-        !existingModel
+        !existingModel &&
+        !attemptedImportsRef.current.has(step.taskId)
       ) {
         index = i;
         break;
@@ -336,6 +376,7 @@ export function GenerateTab() {
     const taskId = step.taskId;
     if (!taskId || recoveringTaskRef.current === taskId) return;
 
+    attemptedImportsRef.current.add(taskId);
     recoveringTaskRef.current = taskId;
     setCurrentTaskId(taskId);
     setStatusText(t('importing'));
@@ -661,7 +702,17 @@ export function GenerateTab() {
       {(isGenerating || isImporting) && (
         <div style={styles.section}>
           <ProgressBar progress={progress} status={statusText} />
-          {currentTaskId && <div style={styles.taskMeta}>{t('task')}: {currentTaskId}</div>}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+            {currentTaskId ? (
+              <div style={styles.taskMeta}>{t('task')}: {currentTaskId.slice(0, 8)}...</div>
+            ) : <div />}
+            <button
+              onClick={handleCancel}
+              style={styles.cancelBtn}
+            >
+              {t('cancelBtn')}
+            </button>
+          </div>
         </div>
       )}
 
@@ -916,5 +967,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 11,
     fontWeight: 600,
     cursor: 'not-allowed',
+  },
+  cancelBtn: {
+    padding: '3px 8px',
+    border: '1px solid #662222',
+    borderRadius: 3,
+    backgroundColor: '#3a1a1a',
+    color: '#ff6b6b',
+    fontSize: 9,
+    cursor: 'pointer',
   },
 };
