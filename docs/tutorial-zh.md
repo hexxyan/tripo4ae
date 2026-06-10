@@ -37,9 +37,12 @@ git clone <仓库地址> tripo4ae
 cd tripo4ae
 npm install
 
-# 开启未签名 CEP 插件支持（macOS）
+# 开启未签名 CEP 插件支持
 # AE 2024/2025 → CSXS.11，AE 2026 → CSXS.12
+# macOS 终端执行：
 defaults write com.adobe.CSXS.12 PlayerDebugMode 1
+# Windows 终端（以管理员身份运行 cmd）执行：
+reg add "HKCU\Software\Adobe\CSXS.12" /v PlayerDebugMode /t REG_SZ /d 1 /f
 
 # 构建并链接到 AE 扩展目录
 npm run build

@@ -37,9 +37,12 @@ git clone <repo-url> tripo4ae
 cd tripo4ae
 npm install
 
-# Enable unsigned CEP extensions (macOS)
+# Enable unsigned CEP extensions
 # AE 2024/2025 → CSXS.11, AE 2026 → CSXS.12
+# On macOS:
 defaults write com.adobe.CSXS.12 PlayerDebugMode 1
+# On Windows (Run Cmd as Administrator):
+reg add "HKCU\Software\Adobe\CSXS.12" /v PlayerDebugMode /t REG_SZ /d 1 /f
 
 # Build and symlink to Adobe extensions directory
 npm run build

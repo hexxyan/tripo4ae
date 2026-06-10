@@ -184,7 +184,7 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 | After Effects | 2024（推荐 2026） |
 | Node.js | 18+ |
 | npm | 9+ |
-| macOS | Intel / Apple Silicon |
+| 操作系统 | Windows 10/11 / macOS (Intel 或 Apple Silicon) |
 
 > **获取 API Key**：前往 [platform.tripo3d.ai](https://platform.tripo3d.ai/) 注册并创建 API Key
 
@@ -199,11 +199,16 @@ npm install
 ### 构建与运行
 
 ```bash
-# 1. 开启 CEP 未签名插件支持（macOS）
+# 1. 开启 CEP 未签名插件支持
 #    ⚠️ 根据你的 AE 版本选择正确的 CSXS 版本号：
 #    AE 2024 / 2025 → CSXS.11
 #    AE 2026        → CSXS.12
+#
+#    macOS 终端执行：
 defaults write com.adobe.CSXS.12 PlayerDebugMode 1
+#
+#    Windows 终端（以管理员身份运行命令提示符 Cmd）执行：
+reg add "HKCU\Software\Adobe\CSXS.12" /v PlayerDebugMode /t REG_SZ /d 1 /f
 
 # 2. 构建并创建符号链接
 npm run build

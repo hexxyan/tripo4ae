@@ -183,7 +183,7 @@ Text/Image → Generate → Refine → Texture → Rig → Animate → Convert �
 | After Effects | 2024 (2026 Recommended) |
 | Node.js | 18+ |
 | npm | 9+ |
-| macOS | Intel / Apple Silicon |
+| OS | Windows 10/11 / macOS (Intel or Apple Silicon) |
 
 > **Get API Key**: Register at [platform.tripo3d.ai](https://platform.tripo3d.ai/) to obtain your API key.
 
@@ -198,11 +198,16 @@ npm install
 ### Build & Run
 
 ```bash
-# 1. Enable unsigned CEP panel loading (macOS)
+# 1. Enable unsigned CEP panel loading
 #    Select CSXS version according to your AE version:
 #    AE 2024 / 2025 → CSXS.11
 #    AE 2026        → CSXS.12
+#
+#    On macOS:
 defaults write com.adobe.CSXS.12 PlayerDebugMode 1
+#
+#    On Windows (Run Command Prompt as Administrator):
+reg add "HKCU\Software\Adobe\CSXS.12" /v PlayerDebugMode /t REG_SZ /d 1 /f
 
 # 2. Build and symlink to Adobe Extension Directory
 npm run build
