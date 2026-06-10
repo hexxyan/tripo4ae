@@ -210,6 +210,9 @@ Apply preset animations to a rigged model:
 
 For imported Native 3D layers, you can fine-tune PBR materials dynamically in the **Advanced PBR Material Options** section at the bottom of the **Animation** tab.
 
+> [!WARNING]
+> **GLB Material Limitation**: Imported GLB models usually have baked-in textures. AE's native PBR material sliders (such as metal, roughness, diffuse, etc.) *do not* override baked texture maps. Tweak options will only visually affect areas without baked textures, or apply baseline offsets. A notice is provided in the UI for clarity.
+
 1. **Read from Layer**: Select a 3D model layer in AE and click **Read from Selected Layer**. The sliders will automatically fetch and sync all 10 physical material values from the AE layer.
 2. **Parameters & Value Ranges**:
    - Sliders map the AE `0.0 - 1.0` floats to user-friendly `0% - 100%` percentages.
@@ -276,9 +279,15 @@ All models imported through the plugin are tracked in the library with:
 
 ### Actions
 
-- **Import**: Re-import a model into the current composition (uses cached local file)
-- **X**: Remove from library (does not delete downloaded files)
-- **Import External**: Import an external GLB, GLTF, FBX, OBJ, or ZIP file through the Tripo API pipeline
+- **Import**: Re-import a model into the current composition (uses cached local file).
+- **X**: Remove from library (does not delete downloaded files).
+- **Import External**: Import an external GLB, GLTF, FBX, OBJ, or ZIP file through the Tripo API pipeline.
+
+### Cloud Generation History
+
+A specialized list fetches your complete generation history directly from the Tripo Cloud:
+- **Prevent Asset Loss**: Since it synchronizes directly with your account, it displays past successful generations even if you clear your browser's local cache or reinstall the plugin.
+- **Redownload past models**: You can click download on any past generation to download the model asset locally and immediately inject it into your After Effects workspace without spending extra credits.
 
 ### Animation Templates
 
@@ -292,11 +301,11 @@ In the **Animation** tab, scroll to the **AE Animation (Local)** section. These 
 
 ### Camera Presets
 
-Choose a camera movement:
-- **Orbit**: Circular orbit around the model
-- **Push**: Push in toward the model
-- **Track**: Side-to-side tracking shot
-- **Jib**: Vertical jib movement
+Choose a camera movement preset. The plugin automatically creates or reuses a 3D Null controller rig (`Tripo4AE_CameraCtrl`) at the composition center, parents the camera to it, and animates the Null layer. This avoids gimbal lock and provides smooth orbital motion:
+- **Orbit**: Circular orbit around the model by animating the Y-rotation of the Null layer.
+- **Push**: Push in toward the model by animating the Z-position.
+- **Track**: Side-to-side tracking shot by animating the X-position.
+- **Jib**: Vertical jib movement by animating the Y-position.
 
 ### Model Entrance Presets
 
@@ -318,6 +327,20 @@ Add continuous looping animations to the layer:
 - **Spin**: Rotate around an axis (choose X/Y/Z, adjust speed)
 - **Float**: Gentle up-and-down oscillation (adjust amplitude and frequency)
 - **Breathe**: Rhythmic scale pulsation (adjust amplitude and frequency)
+
+### Auto-Align Ground Options
+
+Aligning 3D models to a ground plane in After Effects can be tedious due to varying model bounding boxes. The plugin provides automated helper buttons on the **Animation** tab:
+- **Align Model to Ground**: Automatically calculates the bottom bounding box boundary of your selected 3D model (using `sourceRectAtTime` with scale and position factor scaling) and snaps the model's bottom perfectly to the Y-position of the ground layer (`Tripo4AE_Ground`).
+- **Align Ground to Model**: Moves the ground solid layer (`Tripo4AE_Ground`) upward or downward to perfectly contact the bottom of the 3D model.
+
+### HDRI Environment & Shadows
+
+To get realistic PBR materials, reflections, and contact shadows in AE's Advanced 3D renderer:
+1. **Environment Light**: When creating an environment light with an HDR path, the plugin automatically registers it as a native Environment Light, sets the background visibility (`ADBE Light Backgd Visible`) to On, and imports the HDR image to act as a 3D skybox.
+2. **Ambient Occlusion (AO)**: Crucially, the Environment Light has **Casts Shadows** enabled. This generates ambient occlusion and soft contact shadows on the ground catcher solid, preventing your model from looking washed out under environmental lighting.
+3. **Key Light Shadows**: The default three-point lighting setup places Key and Fill lights in front of the model (negative Z) and Rim light behind (positive Z). The Key Light has shadow darkness set to 80% to produce strong, clean directional shadows.
+4. **Shadow Catcher Floor**: The ground floor layer (`Tripo4AE_Ground`) is colored light gray (`[0.85, 0.85, 0.85]`) and has **Accepts Shadows** set to **On** (instead of "Only") so that it remains visible in the composition space while clearly catching model shadows.
 
 ### Saving Templates
 

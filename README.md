@@ -64,12 +64,13 @@ Parameters: Model Version (v3.1, P1, Turbo, v3.0, v2.5), Face Limit, PBR, Quad, 
 
 **AE Local Services:**
 
-| Category | Presets |
+| Category | Presets / Features |
 |----------|---------|
-| Camera | Orbit, Push, Track, Jib |
+| Camera | Orbit, Push, Track, Jib (with automatic 3D Null controller rig parenting) |
 | Model Entrance | Fade In, Scale Pop, Flip, Slide In |
 | Loop Expressions | Spin (X/Y/Z), Float, Breathe |
 | Easing | Linear, Ease In/Out, Bounce, Elastic |
+| Model Alignment | Align Model to Ground, Align Ground to Model (using sourceRectAtTime) |
 | PBR Materials | Advanced PBR Material Options panel to read and apply 10 core PBR parameters |
 
 ### 🔧 Transformation (Transform)
@@ -85,6 +86,7 @@ Parameters: Model Version (v3.1, P1, Turbo, v3.0, v2.5), Face Limit, PBR, Quad, 
 ### 📚 Model Library (Library)
 
 - Track all generated models with metadata and thumbnails.
+- **Cloud Generation History**: Pull and list past generation history directly from Tripo Cloud to prevent credit loss and download previously generated assets.
 - One-click re-import to active composition (uses cached local file).
 - Save/load custom animation templates as JSON.
 - Import external models (GLB, GLTF, FBX, OBJ, ZIP) to run through the Tripo pipeline.
@@ -96,9 +98,12 @@ Parameters: Model Version (v3.1, P1, Turbo, v3.0, v2.5), Face Limit, PBR, Quad, 
 | Feature | Description |
 |---------|-------------|
 | ThreeDModelLayer Detection | Accurately identify native 3D model layers (AE 24.4+) at the script level |
-| Adobe Standard Material | Control 12 PBR properties via match names; UI panel allows reading and writing 10 core parameters (ambient, diffuse, specular, roughness, metalness, transmission, reflection, transparency, IOR) |
+| Adobe Standard Material | Control 12 PBR properties via match names; UI panel allows reading/writing 10 core parameters. *Note: native PBR sliders do not visually affect baked materials on imported GLB models.* |
 | Embedded Animation | Control embedded GLB/FBX skeletal animations via Time Remap expressions |
-| HDRI Environment Light | One-click environment light creation with custom HDRI image setups |
+| HDRI Environment Light | One-click environment light creation with custom HDRI setups, background visibility toggle, and shadow-casting enabled for realistic Ambient Occlusion (AO) and contact shadows |
+| Camera Null Control Rig | Automatically parents cameras to a 3D Null controller (`Tripo4AE_CameraCtrl`) to enable intuitive orbit and rotation control |
+| Ground Shadow Catcher | Creates a visible light-gray ground (`[0.85, 0.85, 0.85]`) configured to accept shadows while preventing self-shadow artifacts |
+| Auto-Align Tools | Script-driven bounding box calculation to align models perfectly with the composition floor or vice-versa |
 | Material Presets | 8 built-in presets: default, metallic, glass, plastic, rubber, ceramic, gold, clay |
 | Renderer Switch | Automatically switches composition renderer to Advanced 3D / Mercury 3D Engine |
 
@@ -115,6 +120,7 @@ Text/Image → Generate → Refine → Texture → Rig → Animate → Convert �
 - **State Persistence**: Zustand + localStorage ensures panel state survives docking/undocking and reloads.
 - **Auto-resume**: Scans persisted state on startup to resume unfinished generation tasks automatically.
 - **Adaptive Polling**: Automatically adjusts poll interval based on API-returned `running_left_time`, capped at 5s.
+- **Robust Downloader**: Built-in Node.js HTTP/HTTPS downloader running outside the Chromium page sandbox to bypass CORS restrictions and SSL negotiation hangs under Adobe CEP.
 
 ---
 

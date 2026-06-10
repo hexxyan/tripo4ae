@@ -62,14 +62,15 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 | Rig | 绑定骨骼（双足/四足/六足/八足/鸟类/蛇形/水生） |
 | Retarget | 应用动画预设（100+ 种：行走/跑步/跳舞/战斗/运动/日常/动物） |
 
-**AE 侧动画：**
+**AE 侧动画与辅助工具：**
 
-| 类型 | 预设 |
+| 类型 | 预设 / 功能 |
 |------|------|
-| 摄像机 | 环绕 (Orbit)、推入 (Push)、平移 (Track)、摇臂 (Jib) |
-| 模型 | 淡入、缩放弹出、翻转、滑入 |
+| 摄像机 | 环绕 (Orbit)、推入 (Push)、平移 (Track)、摇臂 (Jib)（自动创建 3D Null 控制关联） |
+| 模型入场 | 淡入、缩放弹出、翻转、滑入 |
 | 循环表达式 | 旋转 (Spin)、浮动 (Float)、呼吸 (Breathe) |
 | 缓动 | 线性、缓入缓出、弹跳、弹性 |
+| 模型对齐 | 对齐模型到地面、对齐地面到模型（基于 sourceRectAtTime 空间包围盒计算） |
 | PBR 材质控制 | Advanced PBR Material Options 精细面板，支持一键读取和回写 10 项材质滑块参数 |
 
 ### 🔧 变换（Transform）
@@ -85,6 +86,7 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 ### 📚 模型库（Library）
 
 - 已生成模型列表，含缩略图和元数据
+- **云端生成历史 (Cloud Generation History)**：直接从 Tripo 云端拉取历史任务记录列表，防止因本地缓存清除导致的积分或资产丢失，并支持重新下载。
 - 一键重新导入 AE
 - 动画模板保存/加载（JSON）
 - 导入外部模型文件
@@ -96,9 +98,12 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 | 特性 | 说明 |
 |------|------|
 | ThreeDModelLayer 检测 | AE 24.4+ 新增的 3D 模型图层类型，脚本级精确识别 |
-| Adobe Standard Material | 12 项 PBR 属性控制，面板新增 **Advanced PBR Material Options** 调节滑块，支持读取并回写 10 项核心参数（环境光、漫反射、高光强度/锐度、金属度、透光度、反射强度/锐度、透明度、折射率） |
+| Adobe Standard Material | 12 项 PBR 属性控制，面板新增 **Advanced PBR Material Options** 调节滑块，支持读取并回写 10 项核心参数。*注意：对于 GLB 这种带有烘焙纹理的模型，AE 的 PBR 材质滑块无法覆盖原始模型的贴图，仅对非贴图区域或基础色生效。* |
 | 嵌入动画控制 | 选择 GLB/FBX 中的嵌入动画，通过 Time Remap 实现循环播放 |
-| HDRI 环境光 | 一键创建环境光图层，支持 HDRI 文件 |
+| HDRI 环境光 | 一键创建环境光图层，支持 HDRI 文件，支持背景可见性开关，并默认开启环境光阴影投射以生成真实的接触阴影与环境光遮蔽 (AO) |
+| 摄像机 Null 控制器 | 自动建立 3D Null 节点图层并作为摄像机的父级，方便直观控制镜头的旋转与平移 |
+| 地面影子接收器 | 自动创建偏亮灰色的地面固态层 (`[0.85, 0.85, 0.85]`)，设置其接收阴影属性为开启状态，既可见又能良好承载模型的投影 |
+| 自动对齐工具 | 脚本级实时计算模型包围盒底部边缘，一键实现模型对齐地面或地面贴合模型底部 |
 | 材质预设 | 8 种一键预设：默认、金属、玻璃、塑料、橡胶、陶瓷、黄金、陶土 |
 | 渲染器自动切换 | 导入时自动激活 Advanced 3D / Mercury 3D Engine |
 
@@ -115,6 +120,7 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 - **状态持久化**：Zustand + localStorage，面板吸附/取消吸附不丢失数据
 - **任务自动恢复**：面板重载后自动找到进行中的任务并继续轮询
 - **自适应轮询**：根据 API 返回的 `running_left_time` 动态调整间隔，上限 5 秒
+- **Node.js 文件下载器**：采用宿主 Node.js 异步 HTTPS 模块直接下载文件到本地，绕过 CEP 内置 Chromium 浏览器的 CORS 限制及 SSL 握手挂死问题
 
 ---
 
