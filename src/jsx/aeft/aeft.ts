@@ -132,8 +132,11 @@ export function getActiveCompInfo(): string {
 
 export function importModel(modelPath: string, configJson?: string): string {
   try {
+    app.beginUndoGroup("Tripo4AE Import Model");
+
     var file = new File(modelPath);
     if (!file.exists) {
+      app.endUndoGroup();
       return JSON.stringify({ ok: false, error: "File not found: " + modelPath });
     }
 
@@ -147,7 +150,15 @@ export function importModel(modelPath: string, configJson?: string): string {
     var comp = app.project.activeItem;
 
     if (!comp || !(comp instanceof CompItem)) {
-      return JSON.stringify({ ok: true, data: { name: footage.name, addedToComp: false } });
+      comp = app.project.items.addComp(
+        "Tripo4AE_Comp",
+        1920,
+        1080,
+        1,
+        10,
+        30
+      );
+      try { comp.openInViewer(); } catch (e) {}
     }
 
     // Ensure Advanced 3D renderer
@@ -188,6 +199,7 @@ export function importModel(modelPath: string, configJson?: string): string {
       } catch (e) {}
     }
 
+    app.endUndoGroup();
     return JSON.stringify({
       ok: true,
       data: {
@@ -199,6 +211,7 @@ export function importModel(modelPath: string, configJson?: string): string {
       },
     });
   } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
     return JSON.stringify({ ok: false, error: String(e) });
   }
 }
