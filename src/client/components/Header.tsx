@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { useStore } from '../stores/useStore';
 import { TripoApiService } from '../services/tripoApi';
 import { useTranslation } from '../hooks/useTranslation';
+import CSInterface from '../../js/lib/cep/csinterface';
 
 export function Header() {
   const apiKey = useStore((s) => s.apiKey);
@@ -105,6 +106,32 @@ export function Header() {
           </button>
         )}
       </div>
+
+      {!isConnected && (
+        <div style={styles.onboardingRow}>
+          <span style={styles.onboardingText}>{t('noApiKeyPrompt')}</span>
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              try {
+                if (typeof window.cep !== 'undefined') {
+                  const cs = new CSInterface();
+                  cs.openURLInDefaultBrowser('https://platform.tripo3d.ai/');
+                } else {
+                  window.open('https://platform.tripo3d.ai/', '_blank');
+                }
+              } catch (err) {
+                console.error(err);
+                window.open('https://platform.tripo3d.ai/', '_blank');
+              }
+            }}
+            style={styles.onboardingLink}
+          >
+            {t('getApiKeyLink')}
+          </a>
+        </div>
+      )}
 
       {error && <div style={styles.error}>{error}</div>}
     </div>
@@ -213,5 +240,22 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 4,
     fontSize: 10,
     color: '#f44336',
+  },
+  onboardingRow: {
+    marginTop: 6,
+    fontSize: 9,
+    color: '#888',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    flexWrap: 'wrap',
+  },
+  onboardingText: {
+    color: '#888',
+  },
+  onboardingLink: {
+    color: '#4a9eff',
+    textDecoration: 'none',
+    cursor: 'pointer',
   },
 };

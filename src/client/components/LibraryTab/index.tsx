@@ -25,6 +25,36 @@ export function LibraryTab() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
 
+  // Search and Filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'imported' | 'animated' | 'stylized'>('all');
+
+  const filteredModels = models.filter((model) => {
+    // 1. Search Query filter
+    const matchesSearch =
+      model.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (model.prompt && model.prompt.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    if (!matchesSearch) return false;
+
+    // 2. Tab Filter
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'imported') {
+      return model.workflow !== 'project_only';
+    }
+    if (activeFilter === 'animated') {
+      const isAnimatedName = model.name.toLowerCase().includes('animate') || model.name.toLowerCase().includes('rig');
+      const hasAnimSteps = model.pipelineSteps?.some((s) => s.type.includes('animate')) || false;
+      return isAnimatedName || hasAnimSteps || model.format === 'FBX';
+    }
+    if (activeFilter === 'stylized') {
+      const isStylizedName = model.name.toLowerCase().includes('styl') || model.name.toLowerCase().includes('lego') || model.name.toLowerCase().includes('voxel');
+      const hasStylSteps = model.pipelineSteps?.some((s) => s.type.includes('stylize') || s.type.includes('voxel') || s.type.includes('lego')) || false;
+      return isStylizedName || hasStylSteps;
+    }
+    return true;
+  });
+
   const handleReimport = useCallback(async (model: ModelRecord) => {
     if (!model.modelPath) {
       setError(t('noModelPathWarning'));
@@ -287,15 +317,45 @@ export function LibraryTab() {
 
       {error && <div style={styles.error}>{error}</div>}
 
+      {/* Search & Filters */}
+      <div style={styles.filterSection}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder={t('searchPlaceholder')}
+          style={styles.searchInput}
+        />
+        <div style={styles.chipRow}>
+          {(['all', 'imported', 'animated', 'stylized'] as const).map((filter) => {
+            const labelKey = `filter${filter.charAt(0).toUpperCase() + filter.slice(1)}`;
+            const isActive = activeFilter === filter;
+            return (
+              <button
+                key={filter}
+                onClick={() => setActiveFilter(filter)}
+                style={isActive ? styles.chipActive : styles.chip}
+              >
+                {t(labelKey)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Model List */}
-      {models.length === 0 ? (
+      {filteredModels.length === 0 ? (
         <div style={styles.emptyState}>
           <span style={styles.emptyIcon}>-</span>
-          <span style={styles.emptyText}>{t('noModels')}</span>
+          <span style={styles.emptyText}>
+            {searchQuery || activeFilter !== 'all'
+              ? (t('language') === 'zh' ? '没有匹配的资产' : 'No matching assets found')
+              : t('noModels')}
+          </span>
         </div>
       ) : (
         <div style={styles.list}>
-          {models.map((model) => (
+          {filteredModels.map((model) => (
             <div key={model.id} style={styles.modelCard}>
               {/* Thumbnail */}
               <div style={styles.thumbnail}>
@@ -535,5 +595,46 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '2px 5px', fontSize: 8,
     backgroundColor: '#1b321b', border: '1px solid #2e7d32', borderRadius: 3,
     color: '#4caf50', cursor: 'pointer',
+  },
+  filterSection: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 6,
+    marginBottom: 8,
+  },
+  searchInput: {
+    padding: '4px 6px',
+    fontSize: 10,
+    backgroundColor: '#2a2a2a',
+    border: '1px solid #444',
+    borderRadius: 3,
+    color: '#e0e0e0',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box' as const,
+  },
+  chipRow: {
+    display: 'flex',
+    gap: 4,
+  },
+  chip: {
+    padding: '3px 6px',
+    fontSize: 9,
+    backgroundColor: '#2b2b2b',
+    border: '1px solid #444',
+    borderRadius: 12,
+    color: '#999',
+    cursor: 'pointer',
+    transition: 'color 0.15s, border-color 0.15s, background-color 0.15s',
+  },
+  chipActive: {
+    padding: '3px 6px',
+    fontSize: 9,
+    backgroundColor: '#2a3a4f',
+    border: '1px solid #4a9eff',
+    borderRadius: 12,
+    color: '#4a9eff',
+    cursor: 'pointer',
+    fontWeight: 600,
   },
 };

@@ -5,6 +5,8 @@ import {
 } from '../../../shared/constants';
 import type { ModelVersion, TextureQuality, GeometryQuality } from '../../../shared/types';
 
+import { useTranslation } from '../../hooks/useTranslation';
+
 export interface GenerationParams {
   modelVersion: ModelVersion;
   faceLimit: number | undefined;
@@ -22,7 +24,8 @@ interface ParameterPanelProps {
 }
 
 export function ParameterPanel({ params, onChange }: ParameterPanelProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const { t } = useTranslation();
+  const [collapsed, setCollapsed] = useState(true);
 
   return (
     <div style={styles.container}>
@@ -30,7 +33,7 @@ export function ParameterPanel({ params, onChange }: ParameterPanelProps) {
         onClick={() => setCollapsed(!collapsed)}
         style={styles.header}
       >
-        <span>{collapsed ? '▶' : '▼'} Parameters</span>
+        <span>{collapsed ? '▶' : '▼'} {t('advancedOptions')}</span>
       </button>
 
       {!collapsed && (

@@ -1576,3 +1576,75 @@ export function alignGroundToModel(): string {
   }
 }
 
+export function updateSceneProperties(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    app.beginUndoGroup("Tripo4AE Update Scene Properties");
+
+    var envLight = null;
+    var keyLight = null;
+    var fillLight = null;
+    var rimLight = null;
+
+    for (var i = 1; i <= comp.numLayers; i++) {
+      var layer = comp.layer(i);
+      if (layer instanceof LightLayer) {
+        if (layer.name === "Tripo4AE_EnvLight") {
+          envLight = layer;
+        } else if (layer.name === "Tripo4AE_Key") {
+          keyLight = layer;
+        } else if (layer.name === "Tripo4AE_Fill") {
+          fillLight = layer;
+        } else if (layer.name === "Tripo4AE_Rim") {
+          rimLight = layer;
+        }
+      }
+    }
+
+    if (envLight && config.envIntensity !== undefined) {
+      envLight.property("Intensity").setValue(config.envIntensity);
+    }
+
+    if (keyLight) {
+      if (config.lightIntensity !== undefined) {
+        keyLight.property("Intensity").setValue(config.lightIntensity);
+      }
+      if (config.lightColor !== undefined && config.lightColor.length === 3) {
+        keyLight.property("Color").setValue(config.lightColor);
+      }
+      var keyGroup = keyLight.property("ADBE Light Options Group");
+      if (keyGroup) {
+        if (config.castShadows !== undefined) {
+          try { keyGroup.property("ADBE Light Casts Shadows").setValue(config.castShadows ? 1 : 0); } catch (e) {}
+        }
+        if (config.shadowDarkness !== undefined) {
+          try { keyGroup.property("ADBE Light Shadow Darkness").setValue(config.shadowDarkness); } catch (e) {}
+        }
+        if (config.shadowDiffusion !== undefined) {
+          try { keyGroup.property("ADBE Light Shadow Diffusion").setValue(config.shadowDiffusion); } catch (e) {}
+        }
+      }
+    }
+
+    if (config.lightIntensity !== undefined) {
+      if (fillLight) {
+        fillLight.property("Intensity").setValue(config.lightIntensity * 0.4);
+      }
+      if (rimLight) {
+        rimLight.property("Intensity").setValue(config.lightIntensity * 0.6);
+      }
+    }
+
+    app.endUndoGroup();
+    return JSON.stringify({ ok: true });
+  } catch (err) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(err) });
+  }
+}
+

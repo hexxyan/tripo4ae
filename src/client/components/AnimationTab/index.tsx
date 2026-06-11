@@ -124,6 +124,17 @@ function categorizeAnimations(): AnimCategory[] {
 
 const ANIM_CATEGORIES = categorizeAnimations();
 
+const HDR_INFO: Record<string, { desc: string, zhDesc: string, gradient: string }> = {
+  studio_small_03: { desc: 'Studio Soft Light', zhDesc: '摄影棚柔光', gradient: 'linear-gradient(135deg, #5c5c5c 0%, #a0a0a0 100%)' },
+  potsdamer_platz: { desc: 'Urban City Lights', zhDesc: '都市霓虹夜景', gradient: 'linear-gradient(135deg, #121026 0%, #462c82 100%)' },
+  venice_sunset: { desc: 'Sunset Golden Hour', zhDesc: '威尼斯落日金辉', gradient: 'linear-gradient(135deg, #fc4a1a 0%, #f7b733 100%)' },
+  kiara_1_dawn: { desc: 'Kiara Morning Dawn', zhDesc: '清晨曦光', gradient: 'linear-gradient(135deg, #ff7e5f 0%, #feb47b 100%)' },
+  forest_slope: { desc: 'Natural Green Forest', zhDesc: '林地翠绿日光', gradient: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)' },
+  rooitou_park: { desc: 'Open Park Grassy', zhDesc: '公园草地日光', gradient: 'linear-gradient(135deg, #a8ff78 0%, #78ffd6 100%)' },
+  empty_warehouse_01: { desc: 'Industrial Warehouse', zhDesc: '空旷工业厂房', gradient: 'linear-gradient(135deg, #606c88 0%, #3f4c6b 100%)' },
+  dikhololo_night: { desc: 'Starry Night Outdoor', zhDesc: '户外繁星夜空', gradient: 'linear-gradient(135deg, #0f2027 0%, #203a43 100%)' },
+};
+
 export function AnimationTab() {
   const apiKey = useStore((s) => s.apiKey);
   const pipeline = useStore((s) => s.pipeline);
@@ -132,7 +143,7 @@ export function AnimationTab() {
   const addModel = useStore((s) => s.addModel);
   const setBalance = useStore((s) => s.setBalance);
   const csInterface = useCsInterface();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   const importedTaskIds = useRef(new Set<string>());
   const pollerRef = useRef<TaskPoller | null>(null);
@@ -421,6 +432,164 @@ export function AnimationTab() {
   const [castShadows, setCastShadows] = useState(true);
   const [shadowDarkness, setShadowDarkness] = useState(50);
   const [lightsEnvExpanded, setLightsEnvExpanded] = useState(false);
+
+  // One-Click Rig & Animate Wizard states
+  const [isMagicRunning, setIsMagicRunning] = useState(false);
+  const [magicStatus, setMagicStatus] = useState('');
+  const [magicProgress, setMagicProgress] = useState(0);
+
+  // Key Light Shadow Diffusion state
+  const [shadowDiffusion, setShadowDiffusion] = useState(10);
+
+  const handleUpdateSceneProp = useCallback(
+    async (changes: Record<string, any>) => {
+      try {
+        await csInterface.updateSceneProperties(changes);
+      } catch (err) {
+        console.warn('[Tripo4AE] Real-time scene update skipped:', err);
+      }
+    },
+    [csInterface],
+  );
+
+  const handleMagicAnimate = useCallback(async () => {
+    const taskId = modelSteps[modelStepIdx]?.taskId;
+    if (!taskId) {
+      setError(t('selectModelError'));
+      return;
+    }
+    if (selectedAnims.length === 0) {
+      setError(t('selectAnimError'));
+      return;
+    }
+
+    setError(null);
+    setIsMagicRunning(true);
+    setMagicProgress(0);
+    setMagicStatus(t('statusCheckingRig'));
+
+    try {
+      const api = getApi();
+
+      // Step 1: Pre-rig check
+      setMagicStatus(`${t('statusCheckingRig')}...`);
+      const checkReq = {
+        type: 'animate_prerigcheck',
+        original_model_task_id: taskId,
+      };
+      const checkStep: PipelineStep = {
+        type: 'animate_prerigcheck',
+        taskId: null,
+        status: 'pending',
+        params: checkReq as any,
+      };
+      addPipelineStep(checkStep);
+      const checkStepIdx = useStore.getState().pipeline.length - 1;
+
+      const checkTaskId = await api.createTask(checkReq as any);
+      updatePipelineStep(checkStepIdx, { taskId: checkTaskId, status: 'running' });
+
+      const checkPoller = new TaskPoller({ getTask: (id) => api.getTask(id) });
+      pollerRef.current = checkPoller;
+      const checkResult = await checkPoller.pollUntilDone(checkTaskId, {
+        onProgress: (task) => {
+          setMagicProgress(Math.floor(task.progress * 0.1)); // 0% - 10%
+          setMagicStatus(`${t('statusCheckingRig')}... ${task.progress}%`);
+          updatePipelineStep(checkStepIdx, { status: task.status, output: task.output });
+        }
+      });
+      updatePipelineStep(checkStepIdx, { status: 'success', output: checkResult.output });
+
+      if (!checkResult.output?.riggable) {
+        throw new Error(t('riggableFalse') || 'Character is not riggable');
+      }
+
+      // Step 2: Auto Rig
+      setMagicStatus(`${t('statusRigging')}...`);
+      const rigReq = {
+        type: 'animate_rig',
+        original_model_task_id: taskId,
+        rig_type: rigType,
+        out_format: rigOutFormat,
+        spec: rigSpec,
+      };
+      const rigStep: PipelineStep = {
+        type: 'animate_rig',
+        taskId: null,
+        status: 'pending',
+        params: rigReq as any,
+      };
+      addPipelineStep(rigStep);
+      const rigStepIdx = useStore.getState().pipeline.length - 1;
+
+      const rigTaskId = await api.createTask(rigReq as any);
+      updatePipelineStep(rigStepIdx, { taskId: rigTaskId, status: 'running' });
+
+      const rigPoller = new TaskPoller({ getTask: (id) => api.getTask(id) });
+      pollerRef.current = rigPoller;
+      const rigResult = await rigPoller.pollUntilDone(rigTaskId, {
+        onProgress: (task) => {
+          setMagicProgress(10 + Math.floor(task.progress * 0.4)); // 10% - 50%
+          setMagicStatus(`${t('statusRigging')}... ${task.progress}%`);
+          updatePipelineStep(rigStepIdx, { status: task.status, output: task.output });
+        }
+      });
+      updatePipelineStep(rigStepIdx, { status: 'success', output: rigResult.output });
+
+      // Step 3: Retarget
+      setMagicStatus(`${t('statusRetargeting')}...`);
+      const retargetReq = {
+        type: 'animate_retarget',
+        original_model_task_id: rigResult.task_id,
+        animations: selectedAnims,
+        out_format: 'glb',
+        animate_in_place: animateInPlace,
+      };
+      const retargetStep: PipelineStep = {
+        type: 'animate_retarget',
+        taskId: null,
+        status: 'pending',
+        params: retargetReq as any,
+      };
+      addPipelineStep(retargetStep);
+      const retargetStepIdx = useStore.getState().pipeline.length - 1;
+
+      const retargetTaskId = await api.createTask(retargetReq as any);
+      updatePipelineStep(retargetStepIdx, { taskId: retargetTaskId, status: 'running' });
+
+      const retargetPoller = new TaskPoller({ getTask: (id) => api.getTask(id) });
+      pollerRef.current = retargetPoller;
+      const retargetResult = await retargetPoller.pollUntilDone(retargetTaskId, {
+        onProgress: (task) => {
+          setMagicProgress(50 + Math.floor(task.progress * 0.4)); // 50% - 90%
+          setMagicStatus(`${t('statusRetargeting')}... ${task.progress}%`);
+          updatePipelineStep(retargetStepIdx, { status: task.status, output: task.output });
+        }
+      });
+      updatePipelineStep(retargetStepIdx, { status: 'success', output: retargetResult.output });
+
+      // Step 4: Download & Import
+      setMagicProgress(95);
+      setMagicStatus(t('statusDownloading') || 'Downloading model...');
+      await importTaskToAe(
+        retargetResult,
+        `Magic Animated (${selectedAnims.length} anims)`,
+        rigOutFormat.toUpperCase() === 'FBX' ? 'FBX' : 'GLB'
+      );
+
+      setMagicProgress(100);
+      setMagicStatus(t('statusSuccess'));
+    } catch (err: any) {
+      if (err instanceof CancelledError) {
+        return;
+      }
+      setError(err.message || t('statusFailed'));
+      setMagicStatus(t('statusFailed'));
+    } finally {
+      setIsMagicRunning(false);
+      pollerRef.current = null;
+    }
+  }, [apiKey, getApi, modelStepIdx, modelSteps, selectedAnims, rigType, rigOutFormat, rigSpec, animateInPlace, importTaskToAe, addPipelineStep, updatePipelineStep, t]);
 
   // Scene & Material state
   const [sceneError, setSceneError] = useState<string | null>(null);
@@ -735,6 +904,31 @@ export function AnimationTab() {
         )}
       </div>
 
+      {/* Magic One-Click Rig & Animate Wizard */}
+      <div style={styles.sectionBoxMagic}>
+        <div style={{ ...styles.sectionTitle, color: '#d89cff', fontWeight: 'bold' }}>
+          ✨ {t('magicAnimateBtn')}
+        </div>
+        <div style={styles.hint}>
+          {language === 'zh'
+            ? '选择上方的一个角色模型，并在下方勾选需要应用的动作（最多5个），点击下方按钮即可一键完成检测、自动骨骼绑定、动画重定向并自动载入 AE 循环播放。'
+            : 'Select a model above, check animation presets below, and click to automatically rig and apply animation in one go.'}
+        </div>
+        {isMagicRunning ? (
+          <div style={{ padding: '6px 0' }}>
+            <ProgressBar progress={magicProgress} status={magicStatus} />
+          </div>
+        ) : (
+          <button
+            onClick={handleMagicAnimate}
+            disabled={modelStepIdx < 0 || selectedAnims.length === 0}
+            style={modelStepIdx < 0 || selectedAnims.length === 0 ? styles.actionBtnDisabled : styles.actionBtnMagic}
+          >
+            {t('magicAnimateBtn')}
+          </button>
+        )}
+      </div>
+
       {/* Prerigcheck */}
       <div style={styles.sectionBox}>
         <div style={styles.sectionTitle}>{t('checkRigLabel')}</div>
@@ -893,7 +1087,11 @@ export function AnimationTab() {
                 {t('lightIntensityLabel')}: {lightIntensity}%
                 <input
                   type="range" min={0} max={200} step={5}
-                  value={lightIntensity} onChange={(e) => setLightIntensity(Number(e.target.value))}
+                  value={lightIntensity} onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setLightIntensity(val);
+                    void handleUpdateSceneProp({ lightIntensity: val });
+                  }}
                   style={styles.slider}
                 />
               </label>
@@ -902,7 +1100,11 @@ export function AnimationTab() {
                 <input
                   type="color"
                   value={lightColor}
-                  onChange={(e) => setLightColor(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setLightColor(val);
+                    void handleUpdateSceneProp({ lightColor: hexToRgbArray(val) });
+                  }}
                   style={{ width: '100%', height: 20, border: '1px solid #444', padding: 0, backgroundColor: 'transparent', cursor: 'pointer' }}
                 />
               </label>
@@ -922,7 +1124,11 @@ export function AnimationTab() {
               {t('envIntensityLabel')}: {envIntensity}%
               <input
                 type="range" min={0} max={200} step={5}
-                value={envIntensity} onChange={(e) => setEnvIntensity(Number(e.target.value))}
+                value={envIntensity} onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setEnvIntensity(val);
+                  void handleUpdateSceneProp({ envIntensity: val });
+                }}
                 style={styles.slider}
               />
             </label>
@@ -944,21 +1150,33 @@ export function AnimationTab() {
               </div>
             </div>
 
-            {/* HDR Presets */}
-            <div style={styles.fieldLabel}>
-              <span style={{ fontSize: 9, color: '#888' }}>Free HDR Presets (CC0, Poly Haven)</span>
-              <div style={styles.presetRow}>
-                {HDR_PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => handleDownloadHdrPreset(p)}
-                    disabled={!!hdrDownloading}
-                    style={hdrPath.endsWith(`${p.id}.hdr`) ? styles.presetBtnActive : styles.presetBtn}
-                    title={p.label}
-                  >
-                    {hdrDownloading === p.id ? '...' : p.label}
-                  </button>
-                ))}
+            {/* HDR Presets Gallery */}
+            <div style={{ ...styles.fieldLabel, marginTop: 8 }}>
+              <span style={{ fontSize: 10, color: '#ccc', fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                Free HDR Environment Presets (CC0)
+              </span>
+              <div style={styles.hdrGrid}>
+                {HDR_PRESETS.map((p) => {
+                  const info = HDR_INFO[p.id] || { desc: '', zhDesc: '', gradient: 'linear-gradient(135deg, #333 0%, #555 100%)' };
+                  const isActive = hdrPath.endsWith(`${p.id}.hdr`);
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => handleDownloadHdrPreset(p)}
+                      disabled={!!hdrDownloading}
+                      style={isActive ? styles.hdrCardActive : styles.hdrCard}
+                      title={p.label}
+                    >
+                      <div style={{ ...styles.hdrColorBlock, background: info.gradient }}>
+                        {hdrDownloading === p.id && <span style={styles.hdrDownloadSpinner}>⟳</span>}
+                      </div>
+                      <div style={styles.hdrCardInfo}>
+                        <div style={styles.hdrCardName}>{p.label}</div>
+                        <div style={styles.hdrCardDesc}>{language === 'zh' ? info.zhDesc : info.desc}</div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -968,21 +1186,43 @@ export function AnimationTab() {
                 <input
                   type="checkbox"
                   checked={castShadows}
-                  onChange={(e) => setCastShadows(e.target.checked)}
+                  onChange={(e) => {
+                    const val = e.target.checked;
+                    setCastShadows(val);
+                    void handleUpdateSceneProp({ castShadows: val });
+                  }}
                 />
                 {t('castShadowsLabel')}
               </label>
-              {castShadows && (
+            </div>
+            {castShadows && (
+              <div style={styles.row}>
                 <label style={{ ...styles.fieldLabel, flex: 1 }}>
                   {t('shadowDarknessLabel')}: {shadowDarkness}%
                   <input
                     type="range" min={0} max={100} step={5}
-                    value={shadowDarkness} onChange={(e) => setShadowDarkness(Number(e.target.value))}
+                    value={shadowDarkness} onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setShadowDarkness(val);
+                      void handleUpdateSceneProp({ shadowDarkness: val });
+                    }}
                     style={styles.slider}
                   />
                 </label>
-              )}
-            </div>
+                <label style={{ ...styles.fieldLabel, flex: 1 }}>
+                  {t('shadowDiffusionLabel')}: {shadowDiffusion}px
+                  <input
+                    type="range" min={0} max={100} step={2}
+                    value={shadowDiffusion} onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setShadowDiffusion(val);
+                      void handleUpdateSceneProp({ shadowDiffusion: val });
+                    }}
+                    style={styles.slider}
+                  />
+                </label>
+              </div>
+            )}
 
             {/* Independent Trigger Buttons */}
             <div style={styles.row}>
@@ -1398,5 +1638,108 @@ const styles: Record<string, React.CSSProperties> = {
   },
   modelItemMeta: {
     fontSize: 8, color: '#777',
+  },
+  actionBtnMagic: {
+    width: '100%',
+    padding: '8px 0',
+    border: 'none',
+    borderRadius: 3,
+    backgroundColor: '#8e24aa',
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 600,
+    cursor: 'pointer',
+    boxShadow: '0 0 10px rgba(142, 36, 170, 0.3)',
+    textAlign: 'center',
+  },
+  actionBtnDisabled: {
+    width: '100%',
+    padding: '8px 0',
+    border: 'none',
+    borderRadius: 3,
+    backgroundColor: '#2d2d2d',
+    color: '#666',
+    fontSize: 10,
+    fontWeight: 600,
+    cursor: 'not-allowed',
+    textAlign: 'center',
+  },
+  sectionBoxMagic: {
+    padding: 10,
+    backgroundColor: '#20162a',
+    border: '1px solid #7b1fa2',
+    borderRadius: 6,
+    marginBottom: 10,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+  },
+  hdrGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: 6,
+    width: '100%',
+    boxSizing: 'border-box' as const,
+  },
+  hdrCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: 4,
+    backgroundColor: '#252525',
+    border: '1px solid #333',
+    borderRadius: 4,
+    cursor: 'pointer',
+    textAlign: 'left' as const,
+    width: '100%',
+    boxSizing: 'border-box' as const,
+  },
+  hdrCardActive: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: 4,
+    backgroundColor: '#2a3a4f',
+    border: '1px solid #4a9eff',
+    borderRadius: 4,
+    cursor: 'pointer',
+    textAlign: 'left' as const,
+    width: '100%',
+    boxSizing: 'border-box' as const,
+  },
+  hdrColorBlock: {
+    width: 24,
+    height: 24,
+    borderRadius: 3,
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hdrCardInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    minWidth: 0,
+    flex: 1,
+  },
+  hdrCardName: {
+    fontSize: 9,
+    fontWeight: 600,
+    color: '#e0e0e0',
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  hdrCardDesc: {
+    fontSize: 8,
+    color: '#777',
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  hdrDownloadSpinner: {
+    fontSize: 10,
+    color: '#fff',
   },
 };

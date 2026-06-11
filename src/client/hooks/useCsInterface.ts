@@ -195,6 +195,14 @@ export function useCsInterface() {
     [evalScript],
   );
 
+  const updateSceneProperties = useCallback(
+    (config: Record<string, any>): Promise<any> => {
+      const json = JSON.stringify(config).replace(/'/g, "\\'");
+      return evalScript(`tripo4ae.updateSceneProperties('${json}')`);
+    },
+    [evalScript],
+  );
+
   const createParametricMesh = useCallback(
     (config: { meshType: string; color?: number[]; materialPreset?: string; curvature?: number; segments?: number; extrusionDepth?: number; bevelDepth?: number }): Promise<any> => {
       const json = JSON.stringify(config).replace(/'/g, "\\'");
@@ -228,6 +236,7 @@ export function useCsInterface() {
     applyMaterialPreset,
     getMaterialPresets,
     setupScene,
+    updateSceneProperties,
     createParametricMesh,
     alignModelToGround,
     alignGroundToModel,

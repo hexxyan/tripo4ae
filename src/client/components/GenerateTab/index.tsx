@@ -146,10 +146,13 @@ export function GenerateTab() {
   const importTaskWithWorkflow = useCallback(async (
     task: TripoTask,
     workflow: ImportWorkflow,
-    _pipelineIndex: number,
+    pipelineIndex: number,
     forceDownload = false,
   ) => {
     setIsImporting(true);
+    if (pipelineIndex >= 0) {
+      updatePipelineStep(pipelineIndex, { workflow });
+    }
     try {
       const api = getApi();
       let taskToDownload = task;
@@ -320,23 +323,7 @@ export function GenerateTab() {
       updatePipelineStep(pipelineIndex, {
         status: 'success',
         output: result.output,
-        workflow: useStore.getState().pipeline[pipelineIndex]?.workflow,
       });
-      const workflow = useStore.getState().pipeline[pipelineIndex]?.workflow || importWorkflow;
-      const existingModel = useStore.getState().models.find(
-        (model) => model.taskId === result.task_id && model.workflow === workflow,
-      );
-      if (!existingModel) {
-        try {
-          if (abortControllerRef.current?.signal.aborted) {
-            return;
-          }
-          await importTaskWithWorkflow(result, workflow, pipelineIndex);
-        } catch (importErr: any) {
-          setError(`${t('statusSuccess')}, but import failed: ${importErr.message || 'Unknown error'}`);
-          setStatusText(t('statusFailed'));
-        }
-      }
     } catch (err: any) {
       if (err instanceof CancelledError) {
         // User cancelled — do not treat as error, do not update pipeline as failed
@@ -431,7 +418,7 @@ export function GenerateTab() {
         const task = await getApi().getTask(taskId);
         if (cancelled) return;
         setResultTask(task);
-        await importTaskWithWorkflow(task, step.workflow || importWorkflow, index);
+        pipelineIdxRef.current = index;
       } catch (recoverErr: any) {
         if (!cancelled) {
           setError(`${t('recoveryFailed')}: ${recoverErr.message || 'Unknown error'}`);
@@ -744,21 +731,6 @@ export function GenerateTab() {
       {/* Parameters */}
       <ParameterPanel params={params} onChange={(p) => setParams((prev) => ({ ...prev, ...p }))} />
 
-      <label style={styles.fieldLabel}>
-        {t('importWorkflowLabel')}
-        <select
-          value={importWorkflow}
-          onChange={(e) => setImportWorkflow(e.target.value as ImportWorkflow)}
-          style={styles.select}
-        >
-          {IMPORT_WORKFLOWS.map((workflow) => (
-            <option key={workflow.value} value={workflow.value}>
-              {t(workflow.value)} — {t(workflow.value + 'Desc', workflow.description)}
-            </option>
-          ))}
-        </select>
-      </label>
-
       {/* Error */}
       {error && <div style={styles.error}>{error}</div>}
 
@@ -791,39 +763,52 @@ export function GenerateTab() {
               alt="Generated model preview"
             />
           )}
-          <div style={styles.modelInfo}>
-            <span>{t('task')}: {resultTask.task_id.slice(0, 8)}...</span>
-            <span>{t('current')}: {t(importWorkflow)}</span>
-          </div>
-          <div style={styles.importActions}>
-            <span style={{ fontSize: 9, color: '#aaa', margin: '2px 0' }}>{t('reImportTitle')}</span>
-            <div style={styles.importSubRow}>
-              <button
-                onClick={() => handleImportWithSpecificWorkflow('advanced3d')}
-                disabled={isImporting}
-                style={importWorkflow === 'advanced3d' ? styles.activeImportSubBtn : styles.importSubBtn}
-                title={t('advanced3dDesc')}
-              >
-                {t('aeNative')}
-              </button>
-              <button
-                onClick={() => handleImportWithSpecificWorkflow('project_only')}
-                disabled={isImporting}
-                style={importWorkflow === 'project_only' ? styles.activeImportSubBtn : styles.importSubBtn}
-                title={t('project_onlyDesc')}
-              >
-                {t('projectOnly')}
-              </button>
-              <button
-                onClick={() => handleImportWithSpecificWorkflow('element3d')}
-                disabled={isImporting}
-                style={importWorkflow === 'element3d' ? styles.activeImportSubBtn : styles.importSubBtn}
-                title={t('element3dDesc')}
-              >
-                {t('element3d')}
-              </button>
-            </div>
-          </div>
+          {(() => {
+            const isAlreadyImported = models.some((m) => m.taskId === resultTask.task_id);
+            return (
+              <>
+                <div style={styles.modelInfo}>
+                  <span>{t('task')}: {resultTask.task_id.slice(0, 8)}...</span>
+                  {isAlreadyImported ? (
+                    <span style={{ color: '#4caf50', fontWeight: 'bold' }}>✓ {t('taskStatusImported')}</span>
+                  ) : (
+                    <span style={{ color: '#ffaa00', fontWeight: 'bold' }}>○ Ready to Import</span>
+                  )}
+                </div>
+                <div style={styles.importActions}>
+                  <span style={{ fontSize: 9, color: '#aaa', margin: '2px 0', display: 'block' }}>
+                    {isAlreadyImported ? t('reImportTitle') : t('importTitle')}
+                  </span>
+                  <div style={styles.importSubRow}>
+                    <button
+                      onClick={() => handleImportWithSpecificWorkflow('advanced3d')}
+                      disabled={isImporting}
+                      style={isAlreadyImported && importWorkflow === 'advanced3d' ? styles.activeImportSubBtn : styles.importSubBtn}
+                      title={t('advanced3dDesc')}
+                    >
+                      {t('aeNative')}
+                    </button>
+                    <button
+                      onClick={() => handleImportWithSpecificWorkflow('project_only')}
+                      disabled={isImporting}
+                      style={isAlreadyImported && importWorkflow === 'project_only' ? styles.activeImportSubBtn : styles.importSubBtn}
+                      title={t('project_onlyDesc')}
+                    >
+                      {t('projectOnly')}
+                    </button>
+                    <button
+                      onClick={() => handleImportWithSpecificWorkflow('element3d')}
+                      disabled={isImporting}
+                      style={isAlreadyImported && importWorkflow === 'element3d' ? styles.activeImportSubBtn : styles.importSubBtn}
+                      title={t('element3dDesc')}
+                    >
+                      {t('element3d')}
+                    </button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 

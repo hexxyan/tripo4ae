@@ -15,6 +15,18 @@ export const translations = {
     connecting: 'Connecting...',
     credits: 'credits',
     failedToConnect: 'Failed to connect',
+    noApiKeyPrompt: "Don't have an API Key?",
+    getApiKeyLink: 'Register on Tripo to get free credits',
+    advancedOptions: 'Advanced Options',
+    magicAnimateBtn: 'One-Click Rig & Animate (Wizard)',
+    magicAnimateProgress: 'Running Magic Animate...',
+    searchPlaceholder: 'Search models by prompt...',
+    filterAll: 'All',
+    filterImported: 'Imported',
+    filterAnimated: 'Animated',
+    filterStylized: 'Stylized',
+    shadowDiffusionLabel: 'Shadow Diffusion (Softness)',
+
 
     // GenerateTab
     modeText: 'Text',
@@ -28,6 +40,7 @@ export const translations = {
     importing: 'Importing...',
     resultHeader: 'Result',
     reImportTitle: 'Re-run import using workflow:',
+    importTitle: 'Choose import workflow:',
     aeNative: 'AE Native',
     projectOnly: 'Project Only',
     element3d: 'Element 3D',
@@ -375,6 +388,18 @@ export const translations = {
     connecting: '连接中...',
     credits: '积分余额',
     failedToConnect: '连接失败，请检查网络或密钥',
+    noApiKeyPrompt: '没有 API Key？',
+    getApiKeyLink: '点此注册 Tripo 获取免费积分',
+    advancedOptions: '高级选项',
+    magicAnimateBtn: '一键自动绑定动作 (向导)',
+    magicAnimateProgress: '一键自动绑定动作处理中...',
+    searchPlaceholder: '搜索模型提示词/名称...',
+    filterAll: '全部',
+    filterImported: '已导入',
+    filterAnimated: '带动画',
+    filterStylized: '风格化',
+    shadowDiffusionLabel: '投影扩散 (软阴影)',
+
 
     // GenerateTab
     modeText: '文本生成 3D',
@@ -388,6 +413,7 @@ export const translations = {
     importing: '模型导入中...',
     resultHeader: '生成结果',
     reImportTitle: '选择工作流重新导入：',
+    importTitle: '选择工作流载入 AE：',
     aeNative: '原生 3D',
     projectOnly: '仅入素材箱',
     element3d: 'Element 3D',
