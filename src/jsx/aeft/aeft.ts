@@ -1312,6 +1312,29 @@ export function setupScene(configJson?: string): string {
           }
         } catch (e) {}
       }
+
+      // Auto-align ground to model
+      try {
+        var modelLayer = null;
+        for (var i = 1; i <= comp.numLayers; i++) {
+          var lyr = comp.layer(i);
+          if (lyr.threeDLayer && lyr.name.indexOf("Tripo4AE") === -1 && lyr.name.indexOf("Camera") === -1) {
+            modelLayer = lyr;
+            break;
+          }
+        }
+        if (modelLayer && groundLayer) {
+          var rect = modelLayer.sourceRectAtTime(comp.time, false);
+          var scaleY = modelLayer.property("Scale").value[1] / 100;
+          var posY = modelLayer.property("Position").value[1];
+          var anchorY = modelLayer.property("Anchor Point").value[1];
+          var offset = rect.top + rect.height - anchorY;
+          if (rect.width === 0 || rect.height === 0 || rect.width === comp.width) offset = 0;
+          var targetGroundY = posY + offset * scaleY;
+          var posProp = groundLayer.property("Position");
+          posProp.setValue([posProp.value[0], targetGroundY, posProp.value[2]]);
+        }
+      } catch (e) {}
     } catch (e) {}
 
     app.endUndoGroup();
