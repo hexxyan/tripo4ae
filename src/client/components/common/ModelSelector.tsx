@@ -22,6 +22,12 @@ const TASK_LABELS: Record<string, string> = {
   import_model: 'Import',
 };
 
+const SafeImage = ({ src, style, alt }: { src: string; style?: React.CSSProperties; alt?: string }) => {
+  const [failed, setFailed] = React.useState(false);
+  if (failed) return <span style={{ fontSize: 9, color: '#666' }}>3D</span>;
+  return <img src={src} onError={() => setFailed(true)} style={style} alt={alt} />;
+};
+
 export function ModelSelector({ steps, selectedIdx, onSelect, emptyText }: ModelSelectorProps) {
   const { t } = useTranslation();
 
@@ -47,7 +53,7 @@ export function ModelSelector({ steps, selectedIdx, onSelect, emptyText }: Model
             <div style={styles.row}>
               <div style={styles.thumb}>
                 {thumb ? (
-                  <img src={thumb} style={styles.thumbImg} alt="" />
+                  <SafeImage src={thumb} style={styles.thumbImg} alt="" />
                 ) : (
                   <span style={styles.thumbPlaceholder}>3D</span>
                 )}

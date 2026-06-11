@@ -115,6 +115,7 @@ export interface MultiviewToModelRequest {
   orientation?: 'align_image' | 'default';
   auto_size?: boolean;
   export_uv?: boolean;
+  render_image?: boolean;
 }
 
 export interface RefineModelRequest {
@@ -400,7 +401,7 @@ export interface EmbeddedAnimationConfig {
 
 // === Material Presets ===
 
-export type MaterialPresetName = 'plastic' | 'metal' | 'glass' | 'gold' | 'matte' | 'ceramic' | 'rubber' | 'crystal';
+export type MaterialPresetName = 'plastic' | 'metallic' | 'glass' | 'gold' | 'matte' | 'ceramic' | 'rubber' | 'crystal';
 
 export interface MaterialPresetConfig {
   layerIndex?: number;

@@ -47,16 +47,18 @@ export function LibraryTab() {
         console.log('[Tripo4AE] importModel result:', result);
 
         // Auto-configure embedded animation if present
-        try {
-          await csInterface.selectEmbeddedAnimation({
-            layerIndex: result?.layerIndex,
-            animationIndex: 1,
-            enableTimeRemap: true,
-            loopAnimation: true,
-          });
-          console.log('[Tripo4AE] Auto-configured animation loop for:', model.name);
-        } catch (animErr: any) {
-          console.warn('[Tripo4AE] Auto-animation config skipped:', animErr.message);
+        if (result && result.layerIndex !== undefined) {
+          try {
+            await csInterface.selectEmbeddedAnimation({
+              layerIndex: result.layerIndex,
+              animationIndex: 1,
+              enableTimeRemap: true,
+              loopAnimation: true,
+            });
+            console.log('[Tripo4AE] Auto-configured animation loop for:', model.name);
+          } catch (animErr: any) {
+            console.warn('[Tripo4AE] Auto-animation config skipped:', animErr.message);
+          }
         }
       }
     } catch (err: any) {
@@ -387,7 +389,7 @@ export function LibraryTab() {
                     {/* Thumbnail */}
                     <div style={styles.historyThumbnail}>
                       {step.output?.rendered_image ? (
-                        <img src={step.output.rendered_image} style={styles.thumbImg} alt="Thumbnail" />
+                        <img src={step.output?.rendered_image} style={styles.thumbImg} alt="Thumbnail" />
                       ) : (
                         <span style={{ fontSize: 9, color: '#888' }}>{thumbIcon[step.type] || '3D'}</span>
                       )}

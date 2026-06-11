@@ -73,7 +73,22 @@ export function RefineTextureTab() {
   const [refineError, setRefineError] = useState<string | null>(null);
   const [isRefining, setIsRefining] = useState(false);
   const refineIdxRef = useRef<number>(-1);
-  const nextStepIdx = useRef(pipeline.length);
+
+  // Clean up pollers on unmount
+  React.useEffect(() => {
+    return () => {
+      if (refinePollerRef.current) refinePollerRef.current.abort();
+      if (texPollerRef.current) texPollerRef.current.abort();
+    };
+  }, []);
+
+  const handleModeChange = useCallback((mode: TextureInputMode) => {
+    setTexInputMode(mode);
+    setTexPrompt('');
+    setTexImageToken(null);
+    setTexStyleToken(null);
+    setTexError(null);
+  }, []);
 
   // Texture state
   const [texInputMode, setTexInputMode] = useState<TextureInputMode>('text');
@@ -122,6 +137,11 @@ export function RefineTextureTab() {
       setRefineError(t('selectModelWarning'));
       return;
     }
+    const sourceStep = modelSteps[selectedStepIdx];
+    if (sourceStep && (sourceStep.type === 'refine_model' || sourceStep.type === 'texture_model')) {
+      setRefineError(t('cannotRefineRefinedError') || 'Cannot refine an already refined or textured model');
+      return;
+    }
 
     setRefineError(null);
     setRefineResult(null);
@@ -142,9 +162,9 @@ export function RefineTextureTab() {
         status: 'pending',
         params: req,
       };
-      nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
-      refineIdxRef.current = nextStepIdx.current++;
       addPipelineStep(step);
+      const stepIdx = useStore.getState().pipeline.length - 1;
+      refineIdxRef.current = stepIdx;
 
       const newTaskId = await api.createTask(req);
       updatePipelineStep(refineIdxRef.current, {
@@ -252,9 +272,9 @@ export function RefineTextureTab() {
         status: 'pending',
         params: req,
       };
-      nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
       addPipelineStep(step);
-      texIdxRef.current = nextStepIdx.current++;
+      const stepIdx = useStore.getState().pipeline.length - 1;
+      texIdxRef.current = stepIdx;
 
       const newTaskId = await api.createTask(req);
       updatePipelineStep(texIdxRef.current, {
@@ -379,7 +399,7 @@ export function RefineTextureTab() {
           {(['text', 'image', 'style_image'] as TextureInputMode[]).map((mode) => (
             <button
               key={mode}
-              onClick={() => setTexInputMode(mode)}
+              onClick={() => handleModeChange(mode)}
               style={texInputMode === mode ? styles.toggleBtnActive : styles.toggleBtn}
             >
               {mode === 'text' ? t('text') : mode === 'image' ? t('image') : t('style')}

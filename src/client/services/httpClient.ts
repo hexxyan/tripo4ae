@@ -53,11 +53,22 @@ export class TripoHttpClient {
     let lastError: TripoError | undefined;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(body),
-      });
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify(body),
+        });
+      } catch (err: any) {
+        lastError = err;
+        if (attempt < maxRetries) {
+          const backoff = baseDelay * Math.pow(2, attempt);
+          await this.delay(backoff);
+          continue;
+        }
+        throw err;
+      }
 
       if (response.status === 429) {
         const err = new Error('HTTP 429: Too Many Requests') as TripoError;
@@ -70,24 +81,55 @@ export class TripoHttpClient {
         }
       }
 
-      return this.handleResponse<T>(response);
+      return await this.handleResponse<T>(response);
     }
 
-    // Should not reach here, but just in case
     throw lastError ?? new Error('Max retries exceeded');
   }
 
   async postMultipart<T = unknown>(
     path: string,
     formData: FormData,
+    options: PostOptions = {},
   ): Promise<T> {
+    const { maxRetries = 3, baseDelay = 1000 } = options;
     const url = `${this.baseUrl}${path}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: this.getMultipartHeaders(),
-      body: formData,
-    });
-    return this.handleResponse<T>(response);
+
+    let lastError: TripoError | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: this.getMultipartHeaders(),
+          body: formData,
+        });
+      } catch (err: any) {
+        lastError = err;
+        if (attempt < maxRetries) {
+          const backoff = baseDelay * Math.pow(2, attempt);
+          await this.delay(backoff);
+          continue;
+        }
+        throw err;
+      }
+
+      if (response.status === 429) {
+        const err = new Error('HTTP 429: Too Many Requests') as TripoError;
+        err.status = 429;
+        lastError = err;
+        if (attempt < maxRetries) {
+          const backoff = baseDelay * Math.pow(2, attempt);
+          await this.delay(backoff);
+          continue;
+        }
+      }
+
+      return await this.handleResponse<T>(response);
+    }
+
+    throw lastError ?? new Error('Max retries exceeded');
   }
 
   async handleResponse<T>(response: Response): Promise<T> {

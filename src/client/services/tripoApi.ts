@@ -38,6 +38,9 @@ export class TripoApiService {
       '/task',
       request,
     );
+    if (!response || !response.data) {
+      throw new Error('Failed to create task: Invalid API response');
+    }
     return response.data.task_id;
   }
 
@@ -45,6 +48,9 @@ export class TripoApiService {
     const response = await this.client.get<TripoApiResponse<TripoTask>>(
       `/task/${taskId}`,
     );
+    if (!response || !response.data) {
+      throw new Error(`Failed to get task ${taskId}: Invalid API response`);
+    }
     return response.data;
   }
 
@@ -52,6 +58,9 @@ export class TripoApiService {
     const response = await this.client.get<TripoApiResponse<BalanceResponse>>(
       '/user/balance',
     );
+    if (!response || !response.data) {
+      throw new Error('Failed to get user balance: Invalid API response');
+    }
     return response.data;
   }
 
@@ -89,7 +98,6 @@ export class TripoApiService {
 
               const requestOptions = {
                 timeout: 60000,
-                rejectUnauthorized: false,
                 headers: {
                   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 }
@@ -229,8 +237,13 @@ export class TripoApiService {
     console.log(`[Tripo4AE] downloadTaskResult: task=${task.task_id} url=${url.substring(0, 80)}...`);
 
     const nodePath = getNodePath();
-    const urlPath = new URL(url).pathname;
-    const ext = nodePath ? nodePath.extname(urlPath) || '.glb' : '.glb';
+    let urlPath = '';
+    try {
+      urlPath = new URL(url).pathname;
+    } catch (e) {
+      console.warn(`[Tripo4AE] Invalid URL format for model: ${url}`, e);
+    }
+    const ext = (nodePath && urlPath) ? nodePath.extname(urlPath) || '.glb' : '.glb';
     const fileName = `${task.task_id}${ext}`;
     const savePath = nodePath ? nodePath.join(saveDir, fileName) : `${saveDir}/${fileName}`;
 

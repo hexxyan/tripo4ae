@@ -128,7 +128,7 @@ export const LOOP_TYPES: { value: LoopType; label: string }[] = [
 // AE 2026 Material Presets (Adobe Standard Material)
 export const MATERIAL_PRESETS: { value: import('./types').MaterialPresetName; label: string; material: import('./types').MaterialProperties }[] = [
   { value: 'plastic', label: 'Plastic', material: { metal: 0, diffuse: 80, specularIntensity: 50, ambient: 0, specularShininess: 10, reflectionIntensity: 5, transparency: 0 } },
-  { value: 'metal', label: 'Metal', material: { metal: 100, diffuse: 40, specularIntensity: 90, specularShininess: 80, ambient: 0, reflectionIntensity: 80, reflectionSharpness: 90, transparency: 0 } },
+  { value: 'metallic', label: 'Metal', material: { metal: 100, diffuse: 40, specularIntensity: 90, specularShininess: 80, ambient: 0, reflectionIntensity: 80, reflectionSharpness: 90, transparency: 0 } },
   { value: 'glass', label: 'Glass', material: { ambient: 0, diffuse: 10, specularIntensity: 90, specularShininess: 90, metal: 0, reflectionIntensity: 50, transparency: 85, transparencyRolloff: 50, indexOrRefraction: 1.5, lightTransmission: 90 } },
   { value: 'gold', label: 'Gold', material: { ambient: 0, diffuse: 50, specularIntensity: 95, specularShininess: 85, metal: 100, reflectionIntensity: 90, reflectionSharpness: 95, reflectionRolloff: 80, transparency: 0 } },
   { value: 'matte', label: 'Matte', material: { ambient: 10, diffuse: 90, specularIntensity: 0, specularShininess: 0, metal: 0, reflectionIntensity: 0, transparency: 0 } },

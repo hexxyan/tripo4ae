@@ -89,6 +89,11 @@ export const translations = {
     textureSizeLabel: 'Texture Size',
     textureFormatLabel: 'Texture Format',
     fbxPresetLabel: 'FBX Preset',
+    stylize_model: 'Stylizing Model',
+    convert_model: 'Converting Model Format',
+    mesh_segmentation: 'Segmenting Mesh',
+    mesh_completion: 'Completing Mesh',
+    highpoly_to_lowpoly: 'Simplifying Mesh',
 
     // Library Tab
     libraryHeader: 'Model Library',

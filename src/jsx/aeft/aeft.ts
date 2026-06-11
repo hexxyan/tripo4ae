@@ -99,7 +99,7 @@ var LIGHT_TYPE_ENVIRONMENT = 4;
 // --- Material presets (PBR SOP) ---
 var MATERIAL_PRESETS: any = {
   plastic: { ambient: 0, diffuse: 80, specularIntensity: 50, specularShininess: 10, metal: 0, reflectionIntensity: 5, transparency: 0 },
-  metal: { ambient: 0, diffuse: 40, specularIntensity: 90, specularShininess: 80, metal: 100, reflectionIntensity: 80, reflectionSharpness: 90, transparency: 0 },
+  metallic: { ambient: 0, diffuse: 40, specularIntensity: 90, specularShininess: 80, metal: 100, reflectionIntensity: 80, reflectionSharpness: 90, transparency: 0 },
   glass: { ambient: 0, diffuse: 10, specularIntensity: 90, specularShininess: 90, metal: 0, reflectionIntensity: 50, transparency: 85, transparencyRolloff: 50, indexOrRefraction: 1.5, lightTransmission: 90 },
   gold: { ambient: 0, diffuse: 50, specularIntensity: 95, specularShininess: 85, metal: 100, reflectionIntensity: 90, reflectionSharpness: 95, reflectionRolloff: 80, transparency: 0 },
   matte: { ambient: 10, diffuse: 90, specularIntensity: 0, specularShininess: 0, metal: 0, reflectionIntensity: 0, transparency: 0 },
@@ -174,8 +174,7 @@ function ensureAdvanced3DRenderer(comp: any): boolean {
 // --- Expression generators ---
 
 function getSpinExpression(axis: string, speed: number): string {
-  var axisProp = axis === "x" ? "xRotation" : axis === "y" ? "yRotation" : "zRotation";
-  return "// Tripo4AE Spin Expression\nvar spd = " + speed + ";\ntransform." + axisProp + " = time * spd * 360;";
+  return "// Tripo4AE Spin Expression\nvar spd = " + speed + ";\ntime * spd * 360;";
 }
 
 function getFloatExpression(axis: string, amplitude: number, frequency: number): string {
@@ -310,8 +309,10 @@ export function importModel(modelPath: string, configJson?: string): string {
     } catch (e) {}
 
     // Center in comp
-    if (config.centerInComp && layer.position) {
-      layer.position.setValue([comp.width / 2, comp.height / 2]);
+    if (config.centerInComp) {
+      try {
+        layer.property("Position").setValue([comp.width / 2, comp.height / 2, 0]);
+      } catch (e) {}
     }
 
     // Enable time remap for embedded animation access
@@ -669,16 +670,18 @@ export function createCamera(configJson: string): string {
         // Vertigo effect: move camera in while zooming out
         var startZoom = config.startZoom || 200;
         var endZoom = config.endZoom || 800;
-        try {
-          var zoomProp = camGroup.property(CAM_MAP.zoom);
-          if (zoomProp) {
-            while (zoomProp.numKeys > 0) zoomProp.removeKey(1);
-            if (zoomProp.canSetValue) {
-              zoomProp.setValueAtTime(0, startZoom);
-              zoomProp.setValueAtTime(duration, endZoom);
+        if (camGroup) {
+          try {
+            var zoomProp = camGroup.property(CAM_MAP.zoom);
+            if (zoomProp) {
+              while (zoomProp.numKeys > 0) zoomProp.removeKey(1);
+              if (zoomProp.canSetValue) {
+                zoomProp.setValueAtTime(0, startZoom);
+                zoomProp.setValueAtTime(duration, endZoom);
+              }
             }
-          }
-        } catch (e) {}
+          } catch (e) {}
+        }
         var camPosDz = cameraLayer.property("Position");
         if (camPosDz) {
           while (camPosDz.numKeys > 0) camPosDz.removeKey(1);
@@ -1467,7 +1470,11 @@ export function alignModelToGround(): string {
     var scaleY = modelLayer.property("Scale").value[1] / 100;
     var anchorY = modelLayer.property("Anchor Point").value[1];
     
-    var newPosY = groundY - (rect.top + rect.height - anchorY) * scaleY;
+    var offset = rect.top + rect.height - anchorY;
+    if (rect.width === 0 || rect.height === 0 || rect.width === comp.width) {
+      offset = 0; // Fallback: align anchor point directly
+    }
+    var newPosY = groundY - offset * scaleY;
     var posProp = modelLayer.property("Position");
     var currentPos = posProp.value;
     posProp.setValue([currentPos[0], newPosY, currentPos[2]]);
@@ -1527,7 +1534,12 @@ export function alignGroundToModel(): string {
     var scaleY = modelLayer.property("Scale").value[1] / 100;
     var posY = modelLayer.property("Position").value[1];
     var anchorY = modelLayer.property("Anchor Point").value[1];
-    var targetGroundY = posY + (rect.top + rect.height - anchorY) * scaleY;
+    
+    var offset = rect.top + rect.height - anchorY;
+    if (rect.width === 0 || rect.height === 0 || rect.width === comp.width) {
+      offset = 0; // Fallback: align anchor point directly
+    }
+    var targetGroundY = posY + offset * scaleY;
     
     var posProp = groundLayer.property("Position");
     var currentPos = posProp.value;

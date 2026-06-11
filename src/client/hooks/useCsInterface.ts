@@ -4,7 +4,7 @@ import type { CompInfo, AnimationConfig, MaterialProperties, ImportConfig, Envir
 import CSInterface from '../../js/lib/cep/csinterface';
 
 function escapeForEval(str: string): string {
-  return str.replace(/'/g, "\\'");
+  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 let csInstance: any = null;
@@ -65,7 +65,7 @@ export function useCsInterface() {
           reject(new Error('ExtendScript evaluation failed. The JSX host script may not be loaded. Try restarting AE.'));
           return;
         }
-        if (result === undefined || result === null || result === '') {
+        if (result === undefined || result === null || result === '' || result === 'undefined') {
           resolve(null as T);
           return;
         }

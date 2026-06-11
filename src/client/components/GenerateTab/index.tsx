@@ -100,13 +100,17 @@ export function GenerateTab() {
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
 
   const pipelineIdxRef = useRef<number>(-1);
-  const nextStepIdx = useRef(pipeline.length);
   const resumedTaskRef = useRef<string | null>(null);
   const recoveringTaskRef = useRef<string | null>(null);
   const attemptedImportsRef = useRef<Set<string>>(new Set());
   const pollerRef = useRef<TaskPoller | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleCancel = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     if (pollerRef.current) {
       pollerRef.current.abort();
       pollerRef.current = null;
@@ -164,9 +168,8 @@ export function GenerateTab() {
           params: convertReq,
           workflow,
         };
-        nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
-        const convertStepIndex = nextStepIdx.current++;
         addPipelineStep(convertStep);
+        const convertStepIndex = useStore.getState().pipeline.length - 1;
         setStatusText(t('statusConverting'));
         const convertTaskId = await api.createTask(convertReq);
         updatePipelineStep(convertStepIndex, {
@@ -263,8 +266,7 @@ export function GenerateTab() {
             ? t('element3dReady')
             : t('importedToAe')
       );
-    } // wait, handle catch block? No, try block is closed here, wait, finally is next. Let's make sure try-finally matches original
-    finally {
+    } finally {
       setIsImporting(false);
     }
   }, [addPipelineStep, csInterface, getApi, getPoller, getTaskPrompt, models, upsertModel, updatePipelineStep, t]);
@@ -279,7 +281,8 @@ export function GenerateTab() {
     setError(null);
     setResultTask(null);
     setIsGenerating(true);
-    setStatusText(resume ? t('generating') : t('generating'));
+    setStatusText(t('generating'));
+    abortControllerRef.current = new AbortController();
 
     try {
       const poller = getPoller();
@@ -288,6 +291,7 @@ export function GenerateTab() {
         interval: 2000,
         maxInterval: 5000,
         timeout: 15 * 60 * 1000,
+        signal: abortControllerRef.current.signal,
         onProgress: (task) => {
           setProgress(task.progress);
           setStatusText(`${t('generating')} ${task.progress}%`);
@@ -298,6 +302,10 @@ export function GenerateTab() {
           });
         },
       });
+
+      if (abortControllerRef.current?.signal.aborted) {
+        return;
+      }
 
       setResultTask(result);
       setProgress(100);
@@ -320,6 +328,9 @@ export function GenerateTab() {
       );
       if (!existingModel) {
         try {
+          if (abortControllerRef.current?.signal.aborted) {
+            return;
+          }
           await importTaskWithWorkflow(result, workflow, pipelineIndex);
         } catch (importErr: any) {
           setError(`${t('statusSuccess')}, but import failed: ${importErr.message || 'Unknown error'}`);
@@ -337,6 +348,7 @@ export function GenerateTab() {
     } finally {
       setIsGenerating(false);
       pollerRef.current = null;
+      abortControllerRef.current = null;
       if (resumedTaskRef.current === taskId) {
         resumedTaskRef.current = null;
       }
@@ -345,6 +357,7 @@ export function GenerateTab() {
 
   useEffect(() => {
     if (!apiKey || isGenerating || isImporting) return;
+    let cancelled = false;
 
     let index = -1;
     for (let i = pipeline.length - 1; i >= 0; i--) {
@@ -360,7 +373,7 @@ export function GenerateTab() {
         break;
       }
     }
-    if (index < 0) return;
+    if (index < 0 || cancelled) return;
 
     const taskId = pipeline[index].taskId;
     if (!taskId || resumedTaskRef.current === taskId) return;
@@ -368,7 +381,16 @@ export function GenerateTab() {
     resumedTaskRef.current = taskId;
     setCurrentTaskId(taskId);
     setProgress(0);
-    void pollGenerationTask(taskId, index, true);
+    void (async () => {
+      if (!cancelled) {
+        await pollGenerationTask(taskId, index, true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      resumedTaskRef.current = null;
+    };
   }, [apiKey, isGenerating, isImporting, pipeline, pollGenerationTask]);
 
   useEffect(() => {
@@ -458,6 +480,7 @@ export function GenerateTab() {
         if (!prompt.trim()) {
           setError(t('promptRequired'));
           setIsGenerating(false);
+          setStatusText('');
           return;
         }
         const req: TextToModelRequest = {
@@ -475,9 +498,9 @@ export function GenerateTab() {
           params: req,
           workflow: importWorkflow,
         };
-        nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
-        pipelineIdxRef.current = nextStepIdx.current++;
         addPipelineStep(step);
+        const stepIdx = useStore.getState().pipeline.length - 1;
+        pipelineIdxRef.current = stepIdx;
 
         taskId = await api.createTask(req);
         updatePipelineStep(pipelineIdxRef.current, {
@@ -489,6 +512,7 @@ export function GenerateTab() {
         if (!imageToken) {
           setError(t('uploadImageRequired'));
           setIsGenerating(false);
+          setStatusText('');
           return;
         }
         const req: ImageToModelRequest = {
@@ -504,9 +528,9 @@ export function GenerateTab() {
           params: req,
           workflow: importWorkflow,
         };
-        nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
-        pipelineIdxRef.current = nextStepIdx.current++;
         addPipelineStep(step);
+        const stepIdx = useStore.getState().pipeline.length - 1;
+        pipelineIdxRef.current = stepIdx;
 
         taskId = await api.createTask(req);
         updatePipelineStep(pipelineIdxRef.current, {
@@ -519,6 +543,7 @@ export function GenerateTab() {
         if (mvTokens.includes(null)) {
           setError(t('uploadMvRequired') || 'Please upload all 4 views for Multiview generation');
           setIsGenerating(false);
+          setStatusText('');
           return;
         }
         const fileTokens = mvTokens as string[];
@@ -535,9 +560,9 @@ export function GenerateTab() {
           params: req,
           workflow: importWorkflow,
         };
-        nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
-        pipelineIdxRef.current = nextStepIdx.current++;
         addPipelineStep(step);
+        const stepIdx = useStore.getState().pipeline.length - 1;
+        pipelineIdxRef.current = stepIdx;
 
         taskId = await api.createTask(req);
         updatePipelineStep(pipelineIdxRef.current, {
@@ -761,7 +786,7 @@ export function GenerateTab() {
           <div style={styles.previewHeader}>{t('resultHeader')}</div>
           {resultTask.output?.rendered_image && (
             <img
-              src={resultTask.output.rendered_image}
+              src={resultTask.output?.rendered_image}
               style={styles.previewImg}
               alt="Generated model preview"
             />

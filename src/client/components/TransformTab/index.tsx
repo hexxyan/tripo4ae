@@ -67,11 +67,20 @@ export function TransformTab() {
 
   // Task execution
   const taskIdxRef = useRef(-1);
-  const nextStepIdx = useRef(pipeline.length);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState('');
   const [isRunning, setIsRunning] = useState(false);
+  const [activeTaskType, setActiveTaskType] = useState<string | null>(null);
   const isRunningRef = useRef(false);
+
+  // Clean up pollers on unmount
+  React.useEffect(() => {
+    return () => {
+      if (pollerRef.current) {
+        pollerRef.current.abort();
+      }
+    };
+  }, []);
 
   const getModelTaskId = useCallback(() => {
     return modelSteps[modelStepIdx]?.taskId ?? null;
@@ -89,6 +98,7 @@ export function TransformTab() {
     setError(null);
     setResult(null);
     setIsRunning(true);
+    setActiveTaskType(type);
     setProgress(0);
     setStatusText(t('starting'));
 
@@ -102,9 +112,9 @@ export function TransformTab() {
         status: 'pending',
         params: params as any,
       };
-      nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
-      taskIdxRef.current = nextStepIdx.current++;
       addPipelineStep(step);
+      const stepIdx = useStore.getState().pipeline.length - 1;
+      taskIdxRef.current = stepIdx;
 
       const newTaskId = await api.createTask(params as any);
       updatePipelineStep(taskIdxRef.current, { taskId: newTaskId, status: 'running' });
@@ -145,6 +155,7 @@ export function TransformTab() {
     } finally {
       isRunningRef.current = false;
       setIsRunning(false);
+      setActiveTaskType(null);
       pollerRef.current = null;
     }
   }, [apiKey, pipeline, getModelTaskId, addPipelineStep, updatePipelineStep, importTaskToAe, t]);
@@ -172,12 +183,15 @@ export function TransformTab() {
   const [simplifyHighpoly, setSimplifyHighpoly] = useState(false);
 
   const handleSegment = useCallback(async () => {
+    if (isRunningRef.current) return;
+    isRunningRef.current = true;
     const taskId = getModelTaskId();
     if (!taskId) { setError(t('selectModelWarning')); return; }
 
     setError(null);
     setSegResult(null);
     setIsRunning(true);
+    setActiveTaskType('mesh_segmentation');
     setProgress(0);
     setStatusText(t('statusSegmenting'));
 
@@ -191,9 +205,9 @@ export function TransformTab() {
         status: 'pending',
         params: { type: 'mesh_segmentation', original_model_task_id: taskId },
       };
-      nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
-      taskIdxRef.current = nextStepIdx.current++;
       addPipelineStep(step);
+      const stepIdx = useStore.getState().pipeline.length - 1;
+      taskIdxRef.current = stepIdx;
 
       const newTaskId = await api.createTask({
         type: 'mesh_segmentation',
@@ -234,7 +248,9 @@ export function TransformTab() {
         updatePipelineStep(taskIdxRef.current, { status: 'failed' });
       }
     } finally {
+      isRunningRef.current = false;
       setIsRunning(false);
+      setActiveTaskType(null);
       pollerRef.current = null;
     }
   }, [apiKey, pipeline, getModelTaskId, addPipelineStep, updatePipelineStep, importTaskToAe, t]);
@@ -315,7 +331,7 @@ export function TransformTab() {
           </label>
         )}
         <button onClick={handleStylize} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-          {isRunning && statusText.includes('stylize') ? t('stylize_model') : t('stylizeHeader')}
+          {activeTaskType === 'stylize_model' ? t('stylize_model') : t('stylizeHeader')}
         </button>
       </div>
 
@@ -323,7 +339,7 @@ export function TransformTab() {
       <div style={styles.sectionBox}>
         <div style={styles.sectionTitle}>{t('meshEditHeader')}</div>
         <button onClick={handleSegment} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-          {isRunning && statusText.includes('segment') ? t('mesh_segmentation') : t('segmentMeshBtn')}
+          {activeTaskType === 'mesh_segmentation' ? t('mesh_segmentation') : t('segmentMeshBtn')}
         </button>
 
         <label style={styles.fieldLabel}>
@@ -334,7 +350,7 @@ export function TransformTab() {
           />
         </label>
         <button onClick={handleComplete} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-          {isRunning && statusText.includes('completion') ? t('mesh_completion') : t('completeMeshBtn')}
+          {activeTaskType === 'mesh_completion' ? t('mesh_completion') : t('completeMeshBtn')}
         </button>
 
         <div style={styles.subSection}>
@@ -352,7 +368,7 @@ export function TransformTab() {
             {t('highpolyToLowpoly')}
           </label>
           <button onClick={handleSimplify} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-            {isRunning && statusText.includes('highpoly_to_lowpoly') ? t('highpoly_to_lowpoly') : t('simplifyBtn')}
+            {activeTaskType === 'highpoly_to_lowpoly' ? t('highpoly_to_lowpoly') : t('simplifyBtn')}
           </button>
         </div>
       </div>
@@ -405,7 +421,7 @@ export function TransformTab() {
         )}
 
         <button onClick={handleConvert} disabled={isRunning || modelStepIdx < 0} style={styles.actionBtn}>
-          {isRunning && statusText.includes('convert') ? t('convert_model') : t('convertBtn')}
+          {activeTaskType === 'convert_model' ? t('convert_model') : t('convertBtn')}
         </button>
       </div>
 
@@ -438,7 +454,7 @@ export function TransformTab() {
         <div style={styles.resultBox}>
           <span style={styles.resultLabel}>{t('statusSuccess')}: {result.task_id.slice(0, 8)}</span>
           {result.output?.rendered_image && (
-            <img src={result.output.rendered_image} style={styles.previewImg} alt="Result" />
+            <img src={result.output?.rendered_image} style={styles.previewImg} alt="Result" />
           )}
         </div>
       )}

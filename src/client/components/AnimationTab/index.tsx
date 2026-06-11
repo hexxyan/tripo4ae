@@ -197,6 +197,7 @@ export function AnimationTab() {
         thumbnailUrl: task.output?.rendered_image,
         modelPath: localPath,
         format,
+        workflow: 'advanced3d',
         createdAt: Date.now(),
         pipelineSteps: [...useStore.getState().pipeline],
       };
@@ -215,11 +216,19 @@ export function AnimationTab() {
 
   // Task execution helper
   const taskIdxRef = useRef(-1);
-  const nextStepIdx = useRef(pipeline.length);
   const [taskProgress, setTaskProgress] = useState(0);
   const [taskStatus, setTaskStatus] = useState('');
   const [taskResult, setTaskResult] = useState<TripoTask | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+
+  // Clean up pollers on unmount
+  React.useEffect(() => {
+    return () => {
+      if (pollerRef.current) {
+        pollerRef.current.abort();
+      }
+    };
+  }, []);
 
   const getApi = useCallback(() => {
     if (!apiKey) throw new Error(t('failedToConnect'));
@@ -244,9 +253,9 @@ export function AnimationTab() {
         status: 'pending',
         params: params as any,
       };
-      nextStepIdx.current = Math.max(nextStepIdx.current, useStore.getState().pipeline.length);
       addPipelineStep(step);
-      taskIdxRef.current = nextStepIdx.current++;
+      const stepIdx = useStore.getState().pipeline.length - 1;
+      taskIdxRef.current = stepIdx;
 
       const taskId = await api.createTask(params as any);
       updatePipelineStep(taskIdxRef.current, {
@@ -712,7 +721,7 @@ export function AnimationTab() {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     {step.output?.rendered_image && (
-                      <img src={step.output.rendered_image} style={styles.modelThumb} alt="" />
+                      <img src={step.output?.rendered_image} style={styles.modelThumb} alt="" />
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={styles.modelItemName}>{name}</div>

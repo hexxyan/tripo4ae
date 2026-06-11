@@ -8,6 +8,7 @@ export interface PollOptions {
   timeout?: number;       // default 300000ms (5 min)
   maxAttempts?: number;   // default 150
   onProgress?: (task: TripoTask) => void;
+  signal?: AbortSignal;
 }
 
 export class CancelledError extends Error {
@@ -40,12 +41,15 @@ export class TaskPoller {
     const timeout = options?.timeout ?? 300000;
     const maxAttempts = options?.maxAttempts ?? 150;
     const onProgress = options?.onProgress;
+    const abortSignal = options?.signal;
+
+    const isAborted = () => this._aborted || abortSignal?.aborted === true;
 
     const startTime = Date.now();
     let attempts = 0;
 
     while (attempts < maxAttempts) {
-      if (this._aborted) {
+      if (isAborted()) {
         throw new CancelledError(`Polling cancelled for task ${taskId}`);
       }
 
@@ -57,7 +61,7 @@ export class TaskPoller {
       const task = await this.api.getTask(taskId);
       attempts++;
 
-      if (this._aborted) {
+      if (isAborted()) {
         throw new CancelledError(`Polling cancelled for task ${taskId}`);
       }
 
@@ -85,7 +89,7 @@ export class TaskPoller {
       await this.delay(nextInterval);
 
       // Check after delay — the most common time for abort to fire
-      if (this._aborted) {
+      if (isAborted()) {
         throw new CancelledError(`Polling cancelled for task ${taskId}`);
       }
     }
