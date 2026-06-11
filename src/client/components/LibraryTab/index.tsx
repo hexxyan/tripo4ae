@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useStore } from '../../stores/useStore';
 import { TripoApiService } from '../../services/tripoApi';
 import { TaskPoller } from '../../services/taskPoller';
@@ -6,6 +6,9 @@ import { useCsInterface } from '../../hooks/useCsInterface';
 import { useTranslation } from '../../hooks/useTranslation';
 import { IMPORT_WORKFLOWS } from '../../../shared/constants';
 import type { ModelRecord, AnimTemplate } from '../../../shared/types';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 export function LibraryTab() {
   const models = useStore((s) => s.models);
@@ -20,6 +23,7 @@ export function LibraryTab() {
   const [error, setError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [previewModel, setPreviewModel] = useState<ModelRecord | null>(null);
 
   // External import
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -380,6 +384,15 @@ export function LibraryTab() {
 
               {/* Actions */}
               <div style={styles.modelActions}>
+                {model.modelPath && (
+                  <button
+                    onClick={() => setPreviewModel(model)}
+                    style={styles.previewBtn}
+                    title={t('previewBtn')}
+                  >
+                    👁️
+                  </button>
+                )}
                 <button
                   onClick={() => handleReimport(model)}
                   disabled={importingId === model.id}
@@ -496,6 +509,14 @@ export function LibraryTab() {
           );
         })()}
       </div>
+
+      {previewModel && (
+        <GltfPreviewModal
+          modelPath={previewModel.modelPath!}
+          modelName={previewModel.name}
+          onClose={() => setPreviewModel(null)}
+        />
+      )}
     </div>
   );
 }
@@ -636,5 +657,306 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#4a9eff',
     cursor: 'pointer',
     fontWeight: 600,
+  },
+  previewBtn: {
+    padding: '3px 6px',
+    fontSize: 9,
+    backgroundColor: '#2b2b2b',
+    border: '1px solid #555',
+    borderRadius: 3,
+    color: '#ccc',
+    cursor: 'pointer',
+  },
+};
+
+interface GltfPreviewModalProps {
+  modelPath: string;
+  modelName: string;
+  onClose: () => void;
+}
+
+export function GltfPreviewModal({ modelPath, modelName, onClose }: GltfPreviewModalProps) {
+  const mountRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    let active = true;
+    let renderer: THREE.WebGLRenderer | null = null;
+    let scene: THREE.Scene | null = null;
+    let camera: THREE.PerspectiveCamera | null = null;
+    let controls: OrbitControls | null = null;
+    let animationFrameId: number | null = null;
+    let blobUrl: string | null = null;
+
+    const init = async () => {
+      try {
+        const fs = (typeof window !== 'undefined' && (window as any).cep)
+          ? (globalThis as any).require('fs')
+          : null;
+        if (!fs) {
+          throw new Error('Node.js fs is not available for loading local GLB files.');
+        }
+
+        if (!fs.existsSync(modelPath)) {
+          throw new Error(`File does not exist: ${modelPath}`);
+        }
+
+        const buffer = fs.readFileSync(modelPath);
+        const blob = new Blob([buffer], { type: 'model/gltf-binary' });
+        blobUrl = URL.createObjectURL(blob);
+
+        if (!active) return;
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color('#1a1a1a');
+
+        const width = mountRef.current?.clientWidth || 400;
+        const height = mountRef.current?.clientHeight || 300;
+        camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+        camera.position.set(0, 0, 5);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        
+        if (mountRef.current) {
+          mountRef.current.appendChild(renderer.domElement);
+        }
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxDistance = 50;
+        controls.minDistance = 0.5;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const loader = new GLTFLoader();
+        loader.load(
+          blobUrl,
+          (gltf) => {
+            if (!active || !scene) return;
+            const model = gltf.scene;
+
+            model.traverse((child) => {
+              if ((child as THREE.Mesh).isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+
+            scene.add(model);
+
+            const box = new THREE.Box3().setFromObject(model);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+
+            model.position.sub(center);
+
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera!.fov * (Math.PI / 180);
+            let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+            cameraZ *= 1.5;
+            camera!.position.set(0, 0, cameraZ);
+            camera!.lookAt(0, 0, 0);
+
+            if (controls) {
+              controls.target.set(0, 0, 0);
+              controls.update();
+            }
+
+            setLoading(false);
+          },
+          undefined,
+          (err: any) => {
+            console.error('[Tripo4AE] Loader error:', err);
+            setError('GLTF loader failed: ' + (err.message || String(err)));
+            setLoading(false);
+          }
+        );
+
+        const animate = () => {
+          if (!active) return;
+          animationFrameId = requestAnimationFrame(animate);
+
+          if (controls) controls.update();
+          if (renderer && scene && camera) {
+            renderer.render(scene, camera);
+          }
+        };
+        animate();
+
+        const handleResize = () => {
+          if (!mountRef.current || !renderer || !camera) return;
+          const w = mountRef.current.clientWidth;
+          const h = mountRef.current.clientHeight;
+          camera.aspect = w / h;
+          camera.updateProjectionMatrix();
+          renderer.setSize(w, h);
+        };
+        window.addEventListener('resize', handleResize);
+
+        return () => {
+          window.removeEventListener('resize', handleResize);
+        };
+
+      } catch (err: any) {
+        console.error('[Tripo4AE] WebGL init error:', err);
+        setError(err.message || String(err));
+        setLoading(false);
+      }
+    };
+
+    init();
+
+    return () => {
+      active = false;
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId);
+      }
+
+      if (scene) {
+        scene.traverse((obj) => {
+          if ((obj as THREE.Mesh).isMesh) {
+            const mesh = obj as THREE.Mesh;
+            if (mesh.geometry) mesh.geometry.dispose();
+            if (mesh.material) {
+              if (Array.isArray(mesh.material)) {
+                mesh.material.forEach((mat) => mat.dispose());
+              } else {
+                mesh.material.dispose();
+              }
+            }
+          }
+        });
+      }
+
+      if (renderer) {
+        renderer.dispose();
+        if (renderer.domElement && renderer.domElement.parentNode) {
+          renderer.domElement.parentNode.removeChild(renderer.domElement);
+        }
+      }
+
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+  }, [modelPath]);
+
+  return (
+    <div style={modalStyles.overlay}>
+      <div style={modalStyles.modal}>
+        <div style={modalStyles.header}>
+          <span style={modalStyles.title}>{modelName}</span>
+          <button style={modalStyles.closeBtn} onClick={onClose}>
+            {t('closeBtn')}
+          </button>
+        </div>
+        <div style={modalStyles.viewportContainer}>
+          {loading && (
+            <div style={modalStyles.infoOverlay}>
+              <span style={{ fontSize: 13, color: '#e0e0e0', fontWeight: 'bold' }}>⚡</span>
+              <span>{t('loadingModel')}</span>
+            </div>
+          )}
+          {error && (
+            <div style={modalStyles.infoOverlay}>
+              <span style={{ color: '#ff6b6b', fontSize: 11 }}>{error}</span>
+            </div>
+          )}
+          <div ref={mountRef} style={modalStyles.viewport} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const modalStyles: Record<string, React.CSSProperties> = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 9999,
+  },
+  modal: {
+    width: '90%',
+    maxWidth: 500,
+    backgroundColor: '#1e1e1e',
+    border: '1px solid #333',
+    borderRadius: 6,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+  },
+  header: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 12px',
+    borderBottom: '1px solid #333',
+    backgroundColor: '#252525',
+  },
+  title: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: '#e0e0e0',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: 320,
+  },
+  closeBtn: {
+    padding: '4px 10px',
+    fontSize: 9,
+    backgroundColor: '#f44336',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 3,
+    cursor: 'pointer',
+  },
+  viewportContainer: {
+    position: 'relative',
+    width: '100%',
+    height: 350,
+    backgroundColor: '#1a1a1a',
+  },
+  viewport: {
+    width: '100%',
+    height: '100%',
+  },
+  infoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(26,26,26,0.9)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    color: '#888',
+    fontSize: 11,
+    zIndex: 10,
   },
 };

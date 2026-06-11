@@ -25,13 +25,40 @@ export function Header() {
     setConnecting(true);
     setError(null);
 
+    if (!/^tsk_/.test(trimmed)) {
+      setError(t('apiKeyFormatError'));
+      setConnecting(false);
+      return;
+    }
+
     try {
       const api = new TripoApiService(trimmed);
       const result = await api.getBalance();
+      
       setApiKey(trimmed);
       setBalance(result.balance);
+
+      if (result.balance <= 0) {
+        setError(t('apiKeyZeroBalance'));
+      }
     } catch (e: any) {
-      setError(e.message || t('failedToConnect'));
+      console.error('[Tripo4AE] Connect error:', e);
+      if (e.status === 401) {
+        setError(t('apiKeyUnauthorized'));
+      } else if (e.status === 403) {
+        setError(t('apiKeyUnauthorized') + ' (403)');
+      } else if (
+        e.message &&
+        (e.message.includes('fetch') ||
+          e.message.includes('NetworkError') ||
+          e.message.includes('ENOTFOUND') ||
+          e.message.includes('ECONNREFUSED') ||
+          e.message.includes('Failed to fetch'))
+      ) {
+        setError(t('networkConnectionError'));
+      } else {
+        setError(e.message || t('failedToConnect'));
+      }
       setApiKey(null);
       setBalance(0);
     } finally {

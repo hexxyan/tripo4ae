@@ -26,6 +26,13 @@ export const translations = {
     filterAnimated: 'Animated',
     filterStylized: 'Stylized',
     shadowDiffusionLabel: 'Shadow Diffusion (Softness)',
+    apiKeyFormatError: "Format Error: API Key should start with 'tsk_' and be alphanumeric",
+    apiKeyUnauthorized: "Unauthorized (401): Please verify that your API Key is correct",
+    apiKeyZeroBalance: "Insufficient Credits: Your account balance is 0",
+    networkConnectionError: "Network Error: Cannot connect to api.tripo3d.ai",
+    previewBtn: "Preview",
+    closeBtn: "Close",
+    loadingModel: "Loading 3D model...",
 
 
     // GenerateTab
@@ -399,6 +406,13 @@ export const translations = {
     filterAnimated: '带动画',
     filterStylized: '风格化',
     shadowDiffusionLabel: '投影扩散 (软阴影)',
+    apiKeyFormatError: '格式错误：API Key 应以 \'tsk_\' 开头',
+    apiKeyUnauthorized: '未授权 (401)：请检查密钥是否正确并处于激活状态',
+    apiKeyZeroBalance: '余额不足：您的账户积分为 0',
+    networkConnectionError: '网络错误：无法连接至 Tripo 接口',
+    previewBtn: '预览',
+    closeBtn: '关闭',
+    loadingModel: '三维模型加载中...',
 
 
     // GenerateTab
