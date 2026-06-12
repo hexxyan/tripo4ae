@@ -16,10 +16,10 @@ const config: CEP_Config = {
   ],
 
   type: "Panel",
-  // iconDarkNormal: "./src/assets/light-icon.png",
-  // iconNormal: "./src/assets/dark-icon.png",
-  // iconDarkNormalRollOver: "./src/assets/light-icon.png",
-  // iconNormalRollOver: "./src/assets/dark-icon.png",
+  iconDarkNormal: "",
+  iconNormal: "",
+  iconDarkNormalRollOver: "",
+  iconNormalRollOver: "",
   parameters: [
     "--v=0",
     "--enable-nodejs",

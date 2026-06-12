@@ -726,6 +726,7 @@ export function GltfPreviewModal({ modelPath, modelName, onClose }: GltfPreviewM
     let controls: OrbitControls | null = null;
     let animationFrameId: number | null = null;
     let blobUrl: string | null = null;
+    const cleanups: Array<() => void> = [];
 
     const init = async () => {
       try {
@@ -768,6 +769,70 @@ export function GltfPreviewModal({ modelPath, modelName, onClose }: GltfPreviewM
         controls.dampingFactor = 0.05;
         controls.maxDistance = 50;
         controls.minDistance = 0.5;
+
+        // CEP/CEF in AE panels does not dispatch pointerdown to embedded canvas
+        // content until the input pipeline is "primed" (DevTools attaching via
+        // CDP is one known trigger). OrbitControls waits on pointerdown to start
+        // drag-rotate, so it stays idle. Wheel zoom works because wheel takes a
+        // different code path. We synthesize PointerEvents from MouseEvents,
+        // which CEP dispatches reliably. The isSynthesizing guard prevents our
+        // own pointerdown listener from mistaking the synthetic event for a real
+        // one (which would silently break subsequent drags). If real pointerdown
+        // ever fires (future CEP fix), synthesis auto-disables.
+        const canvasEl = renderer.domElement as HTMLCanvasElement & {
+          setPointerCapture: (id: number) => void;
+          releasePointerCapture: (id: number) => void;
+        };
+        canvasEl.setPointerCapture = () => {};
+        canvasEl.releasePointerCapture = () => {};
+
+        const canvas = renderer.domElement;
+        let realPointerDownSeen = false;
+        let isSynthesizing = false;
+        const onRealPointerDown = () => {
+          if (isSynthesizing) return;
+          realPointerDownSeen = true;
+        };
+        canvas.addEventListener('pointerdown', onRealPointerDown, { passive: true });
+        cleanups.push(() => canvas.removeEventListener('pointerdown', onRealPointerDown));
+
+        const synthesize = (mouseEvent: MouseEvent, type: string) => {
+          if (realPointerDownSeen && type === 'pointerdown') return;
+          isSynthesizing = true;
+          try {
+            canvas.dispatchEvent(new PointerEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              pointerId: 1,
+              pointerType: 'mouse',
+              isPrimary: true,
+              width: 1,
+              height: 1,
+              pressure: type === 'pointerdown' ? 0.5 : (mouseEvent.buttons ? 0.5 : 0),
+              clientX: mouseEvent.clientX,
+              clientY: mouseEvent.clientY,
+            }));
+          } catch (e) {
+            console.warn('[Tripo4AE] PointerEvent synthesis failed', e);
+          } finally {
+            isSynthesizing = false;
+          }
+        };
+
+        const onMouseDown = (e: MouseEvent) => synthesize(e, 'pointerdown');
+        const onMouseMove = (e: MouseEvent) => {
+          if (e.buttons) synthesize(e, 'pointermove');
+        };
+        const onMouseUp = (e: MouseEvent) => synthesize(e, 'pointerup');
+        canvas.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        cleanups.push(() => {
+          canvas.removeEventListener('mousedown', onMouseDown);
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        });
 
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
         scene.add(ambientLight);
@@ -843,10 +908,7 @@ export function GltfPreviewModal({ modelPath, modelName, onClose }: GltfPreviewM
           renderer.setSize(w, h);
         };
         window.addEventListener('resize', handleResize);
-
-        return () => {
-          window.removeEventListener('resize', handleResize);
-        };
+        cleanups.push(() => window.removeEventListener('resize', handleResize));
 
       } catch (err: any) {
         console.error('[Tripo4AE] WebGL init error:', err);
@@ -859,6 +921,8 @@ export function GltfPreviewModal({ modelPath, modelName, onClose }: GltfPreviewM
 
     return () => {
       active = false;
+      cleanups.forEach((fn) => fn());
+      cleanups.length = 0;
       if (animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId);
       }
@@ -884,6 +948,10 @@ export function GltfPreviewModal({ modelPath, modelName, onClose }: GltfPreviewM
         if (renderer.domElement && renderer.domElement.parentNode) {
           renderer.domElement.parentNode.removeChild(renderer.domElement);
         }
+      }
+
+      if (controls) {
+        controls.dispose();
       }
 
       if (blobUrl) {
