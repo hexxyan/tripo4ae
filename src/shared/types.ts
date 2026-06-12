@@ -298,6 +298,7 @@ export interface PipelineStep {
   taskId: string | null;
   status: TaskStatus | 'pending';
   output?: TripoTask['output'];
+  thumbnailPath?: string;
   params: TripoTaskRequest;
   workflow?: ImportWorkflow;
 }
@@ -310,6 +311,7 @@ export interface ModelRecord {
   name: string;
   prompt?: string;
   thumbnailUrl?: string;
+  thumbnailPath?: string;
   modelPath?: string;
   format: string;
   workflow?: ImportWorkflow;

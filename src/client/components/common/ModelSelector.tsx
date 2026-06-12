@@ -1,6 +1,9 @@
 import React from 'react';
 import { useTranslation } from '../../hooks/useTranslation';
 import type { PipelineStep } from '../../../shared/types';
+import { useStore } from '../../stores/useStore';
+import { TripoApiService } from '../../services/tripoApi';
+import { ThumbnailImage } from './ThumbnailImage';
 
 interface ModelSelectorProps {
   steps: PipelineStep[];
@@ -30,6 +33,9 @@ const SafeImage = ({ src, style, alt }: { src: string; style?: React.CSSProperti
 
 export function ModelSelector({ steps, selectedIdx, onSelect, emptyText }: ModelSelectorProps) {
   const { t } = useTranslation();
+  const apiKey = useStore((s) => s.apiKey);
+  const updatePipelineStep = useStore((s) => s.updatePipelineStep);
+  const api = React.useMemo(() => apiKey ? new TripoApiService(apiKey) : null, [apiKey]);
 
   if (steps.length === 0) {
     return <span style={styles.empty}>{emptyText || t('noModels')}</span>;
@@ -52,7 +58,29 @@ export function ModelSelector({ steps, selectedIdx, onSelect, emptyText }: Model
           >
             <div style={styles.row}>
               <div style={styles.thumb}>
-                {thumb ? (
+                {step.taskId && api ? (
+                  <ThumbnailImage
+                    taskId={step.taskId}
+                    thumbnailUrl={thumb}
+                    thumbnailPath={step.thumbnailPath}
+                    api={api}
+                    onUpdate={(newUrl, newLocalPath) => {
+                      const globalPipeline = useStore.getState().pipeline;
+                      const globalIndex = globalPipeline.findIndex((s) => s.taskId === step.taskId);
+                      if (globalIndex !== -1) {
+                        updatePipelineStep(globalIndex, {
+                          output: {
+                            ...globalPipeline[globalIndex].output,
+                            rendered_image: newUrl,
+                          },
+                          thumbnailPath: newLocalPath,
+                        });
+                      }
+                    }}
+                    style={styles.thumbImg}
+                    fallbackText="3D"
+                  />
+                ) : thumb ? (
                   <SafeImage src={thumb} style={styles.thumbImg} alt="" />
                 ) : (
                   <span style={styles.thumbPlaceholder}>3D</span>

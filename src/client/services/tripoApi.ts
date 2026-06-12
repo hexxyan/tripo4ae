@@ -228,6 +228,13 @@ export class TripoApiService {
    * Returns local file path.
    */
   async downloadTaskResult(task: TripoTask, saveDir: string, onProgress?: (bytesReceived: number, totalBytes: number) => void): Promise<string> {
+    // Background download of the thumbnail
+    if (task.output?.rendered_image) {
+      this.downloadThumbnail(task, saveDir).catch((err) => {
+        console.warn(`[Tripo4AE] Background thumbnail download failed for task ${task.task_id}:`, err);
+      });
+    }
+
     const url = this.getModelUrl(task.output);
     if (!url) {
       console.error(`[Tripo4AE] No model URL in task ${task.task_id}. output keys:`, Object.keys(task.output || {}));
@@ -248,6 +255,38 @@ export class TripoApiService {
     const savePath = nodePath ? nodePath.join(saveDir, fileName) : `${saveDir}/${fileName}`;
 
     return this.downloadModel(url, savePath, onProgress);
+  }
+
+  /**
+   * Get local thumbnail path for a given taskId.
+   */
+  static getLocalThumbnailPath(taskId: string): string {
+    const saveDir = TripoApiService.getModelSaveDir();
+    if (!saveDir) return '';
+    const nodePath = getNodePath();
+    const fileName = `${taskId}_thumb.png`;
+    return nodePath ? nodePath.join(saveDir, fileName) : `${saveDir}/${fileName}`;
+  }
+
+  /**
+   * Download model thumbnail (rendered_image) from a completed task.
+   * Returns local file path.
+   */
+  async downloadThumbnail(task: TripoTask, saveDir: string): Promise<string | undefined> {
+    const url = task.output?.rendered_image;
+    if (!url) return undefined;
+
+    const nodePath = getNodePath();
+    const fileName = `${task.task_id}_thumb.png`;
+    const savePath = nodePath ? nodePath.join(saveDir, fileName) : `${saveDir}/${fileName}`;
+
+    try {
+      await this.downloadModel(url, savePath);
+      return savePath;
+    } catch (e) {
+      console.warn(`[Tripo4AE] Failed to download thumbnail for task ${task.task_id}:`, e);
+      return undefined;
+    }
   }
 
   /**

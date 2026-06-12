@@ -240,6 +240,7 @@ export function GenerateTab() {
         name: existingModel?.name || getTaskPrompt(task),
         prompt: getTaskPrompt(task),
         thumbnailUrl: task.output?.rendered_image,
+        thumbnailPath: TripoApiService.getLocalThumbnailPath(task.task_id),
         modelPath: localPath,
         format,
         workflow,

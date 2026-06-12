@@ -33,6 +33,7 @@ import type {
   MaterialPresetName,
 } from '../../../shared/types';
 import { ProgressBar } from '../common/ProgressBar';
+import { ModelSelector } from '../common/ModelSelector';
 
 // Animation categories for retarget
 interface AnimCategory {
@@ -206,6 +207,7 @@ export function AnimationTab() {
         taskId: task.task_id,
         name: label,
         thumbnailUrl: task.output?.rendered_image,
+        thumbnailPath: TripoApiService.getLocalThumbnailPath(task.task_id),
         modelPath: localPath,
         format,
         workflow: 'advanced3d',
@@ -873,35 +875,12 @@ export function AnimationTab() {
       {/* Model Selector */}
       <div style={styles.sectionBox}>
         <div style={styles.sectionTitle}>{t('sourceModelLabel')}</div>
-        {modelSteps.length === 0 ? (
-          <span style={{ fontSize: 9, color: '#666' }}>Generate a model first</span>
-        ) : (
-          <div style={styles.modelList}>
-            {modelSteps.map((step, i) => {
-              const prompt = (step.params as any)?.prompt || '';
-              const name = prompt
-                ? (prompt.length > 30 ? prompt.substring(0, 30) + '...' : prompt)
-                : t(step.type);
-              return (
-                <button
-                  key={step.taskId}
-                  onClick={() => setModelStepIdx(i)}
-                  style={modelStepIdx === i ? styles.modelItemActive : styles.modelItem}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {step.output?.rendered_image && (
-                      <img src={step.output?.rendered_image} style={styles.modelThumb} alt="" />
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={styles.modelItemName}>{name}</div>
-                      <div style={styles.modelItemMeta}>{step.taskId?.slice(0, 8)} · {t(step.type)}</div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <ModelSelector
+          steps={modelSteps}
+          selectedIdx={modelStepIdx}
+          onSelect={setModelStepIdx}
+          emptyText={language === 'zh' ? '请先生成一个模型' : 'Generate a model first'}
+        />
       </div>
 
       {/* Magic One-Click Rig & Animate Wizard */}
@@ -1614,31 +1593,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 9,
     cursor: 'pointer',
   },
-  modelList: {
-    display: 'flex', flexDirection: 'column', gap: 4,
-    maxHeight: 150, overflowY: 'auto' as const,
-  },
-  modelItem: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    padding: '4px 6px', border: '1px solid #333', borderRadius: 3,
-    backgroundColor: '#252525', cursor: 'pointer', textAlign: 'left' as const,
-  },
-  modelItemActive: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    padding: '4px 6px', border: '1px solid #4a9eff', borderRadius: 3,
-    backgroundColor: '#2a3a4f', cursor: 'pointer', textAlign: 'left' as const,
-  },
-  modelThumb: {
-    width: 28, height: 28, borderRadius: 2, objectFit: 'cover' as const, flexShrink: 0,
-    backgroundColor: '#333',
-  },
-  modelItemName: {
-    fontSize: 10, fontWeight: 600, color: '#e0e0e0',
-    whiteSpace: 'nowrap' as const, overflow: 'hidden' as const, textOverflow: 'ellipsis' as const,
-  },
-  modelItemMeta: {
-    fontSize: 8, color: '#777',
-  },
+
   actionBtnMagic: {
     width: '100%',
     padding: '8px 0',

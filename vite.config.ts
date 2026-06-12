@@ -1,4 +1,13 @@
 import { defineConfig } from "vite";
+import { execSync } from "child_process";
+
+let commitHash = "";
+try {
+  commitHash = execSync("git rev-parse --short HEAD").toString().trim();
+} catch (e) {
+  console.warn("Failed to get git commit hash:", e);
+}
+
 
 import react from "@vitejs/plugin-react"; 
 
@@ -46,6 +55,9 @@ if (action) runAction(config, action);
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  define: {
+    __COMMIT_HASH__: JSON.stringify(commitHash),
+  },
   plugins: [
     react(), 
     cep(config),

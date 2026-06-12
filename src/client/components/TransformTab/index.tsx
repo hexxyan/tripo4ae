@@ -49,6 +49,7 @@ export function TransformTab() {
         taskId: task.task_id,
         name: label,
         thumbnailUrl: task.output?.rendered_image,
+        thumbnailPath: TripoApiService.getLocalThumbnailPath(task.task_id),
         modelPath: localPath,
         format,
         createdAt: Date.now(),

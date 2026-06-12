@@ -33,6 +33,8 @@ export const translations = {
     previewBtn: "Preview",
     closeBtn: "Close",
     loadingModel: "Loading 3D model...",
+    updateAvailableTooltip: "New version available! Click to open download page",
+    checkUpdateLinkText: "Check updates",
 
 
     // GenerateTab
@@ -413,6 +415,8 @@ export const translations = {
     previewBtn: '预览',
     closeBtn: '关闭',
     loadingModel: '三维模型加载中...',
+    updateAvailableTooltip: '发现新版本！点击打开下载页面',
+    checkUpdateLinkText: '检查更新',
 
 
     // GenerateTab
@@ -497,7 +501,7 @@ export const translations = {
     importExternalBtn: '导入本地外部模型',
     noModels: '本地库中暂无模型。请前往生成标签页开始创作吧！',
     noTemplates: '暂无保存的动画模板。',
-    taskHistoryHeader: '云端生成历史 (防止积分丢失)',
+    taskHistoryHeader: '云端生成历史',
     taskStatusImported: '已导入库',
     taskStatusNotImported: '下载并导入 AE',
     embeddedAnimHeader: '嵌入模型动画控制',

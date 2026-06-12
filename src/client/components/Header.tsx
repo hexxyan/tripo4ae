@@ -1,8 +1,56 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useStore } from '../stores/useStore';
 import { TripoApiService } from '../services/tripoApi';
 import { useTranslation } from '../hooks/useTranslation';
 import CSInterface from '../../js/lib/cep/csinterface';
+import pkg from '../../../package.json';
+import { isNewerVersion } from '../utils/version';
+
+async function fetchLatestVersionInfo(): Promise<{ version: string; url: string; commit?: string }> {
+  const repo = 'hexxyan/tripo4ae';
+  const endpoints = [
+    // 1. Direct release asset download (Fastly CDN, no rate limit)
+    `https://github.com/${repo}/releases/latest/download/latest.json`,
+    // 2. Proxied release asset download (No rate limit, China-friendly)
+    `https://gh-proxy.com/https://github.com/${repo}/releases/latest/download/latest.json`,
+    // 3. jsDelivr package.json (CDN, no rate limit, China-friendly)
+    `https://cdn.jsdelivr.net/gh/${repo}@main/package.json`,
+    // 4. Raw package.json (no rate limit, but raw github is often blocked in China)
+    `https://raw.githubusercontent.com/${repo}/main/package.json`
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.version) {
+          const version = data.version.startsWith('v') ? data.version : `v${data.version}`;
+          const url = data.url || `https://github.com/${repo}/releases`;
+          const commit = data.commit || undefined;
+          return { version, url, commit };
+        }
+      }
+    } catch (e) {
+      console.warn(`[Tripo4AE] Update check failed for endpoint ${url}:`, e);
+    }
+  }
+
+  // Final fallback to official GitHub REST API (subject to rate limit but works as a fallback)
+  const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+  if (!res.ok) {
+    throw res; // Throw response object so manual check can parse status (e.g. 403 Rate Limited)
+  }
+  const data = await res.json();
+  if (data && data.tag_name) {
+    return {
+      version: data.tag_name,
+      url: data.html_url || `https://github.com/${repo}/releases`,
+      commit: data.target_commitish || undefined
+    };
+  }
+  throw new Error('Invalid release data');
+}
 
 export function Header() {
   const apiKey = useStore((s) => s.apiKey);
@@ -15,6 +63,71 @@ export function Header() {
   const [keyInput, setKeyInput] = useState(apiKey ?? '');
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<{ version: string; url: string; commit?: string } | null>(null);
+
+  useEffect(() => {
+    const checkUpdate = async () => {
+      try {
+        const CACHE_KEY = 'tripo4ae_update_check';
+        const cacheStr = localStorage.getItem(CACHE_KEY);
+        const now = Date.now();
+
+        if (cacheStr) {
+          try {
+            const cache = JSON.parse(cacheStr);
+            // If checked less than 24 hours ago, use cache to avoid GitHub rate limits
+            if (now - cache.lastCheck < 24 * 60 * 60 * 1000) {
+              const localCommit = typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : '';
+              const isUpdateAvailable =
+                isNewerVersion(pkg.version, cache.latestVersion) ||
+                (pkg.version === cache.latestVersion &&
+                  cache.latestCommit &&
+                  localCommit &&
+                  !cache.latestCommit.toLowerCase().startsWith(localCommit.toLowerCase()));
+
+              if (isUpdateAvailable) {
+                setUpdateInfo({ version: cache.latestVersion, url: cache.releaseUrl, commit: cache.latestCommit });
+              }
+              return; // Crucial fix: return early regardless of whether version is newer to prevent rate limits
+            }
+          } catch (e) {
+            // Ignore cache error
+          }
+        }
+
+        const info = await fetchLatestVersionInfo();
+        const latestVersion = info.version;
+        const releaseUrl = info.url;
+        const latestCommit = info.commit || '';
+
+        localStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({
+            lastCheck: now,
+            latestVersion,
+            releaseUrl,
+            latestCommit,
+          })
+        );
+
+        const localCommit = typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : '';
+        const isUpdateAvailable =
+          isNewerVersion(pkg.version, latestVersion) ||
+          (pkg.version === latestVersion &&
+            latestCommit &&
+            localCommit &&
+            !latestCommit.toLowerCase().startsWith(localCommit.toLowerCase()));
+
+        if (isUpdateAvailable) {
+          setUpdateInfo({ version: latestVersion, url: releaseUrl, commit: latestCommit });
+        }
+      } catch (e) {
+        console.warn('[Tripo4AE] Failed to check for updates:', e);
+      }
+    };
+
+    checkUpdate();
+  }, []);
 
   const isConnected = apiKey !== null;
 
@@ -73,6 +186,61 @@ export function Header() {
     setError(null);
   }, [setApiKey, setBalance]);
 
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+
+  const handleManualCheck = useCallback(async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (checkingUpdate) return;
+    setCheckingUpdate(true);
+    setUpdateMessage(null);
+
+    try {
+      const info = await fetchLatestVersionInfo();
+      const latestVersion = info.version;
+      const releaseUrl = info.url;
+      const latestCommit = info.commit || '';
+
+      localStorage.setItem(
+        'tripo4ae_update_check',
+        JSON.stringify({
+          lastCheck: Date.now(),
+          latestVersion,
+          releaseUrl,
+          latestCommit,
+        })
+      );
+
+      const localCommit = typeof __COMMIT_HASH__ !== 'undefined' ? __COMMIT_HASH__ : '';
+      const isUpdateAvailable =
+        isNewerVersion(pkg.version, latestVersion) ||
+        (pkg.version === latestVersion &&
+          latestCommit &&
+          localCommit &&
+          !latestCommit.toLowerCase().startsWith(localCommit.toLowerCase()));
+
+      if (isUpdateAvailable) {
+        setUpdateInfo({ version: latestVersion, url: releaseUrl, commit: latestCommit });
+        setUpdateMessage(t('language') === 'zh' ? '有新版' : 'New version');
+      } else {
+        setUpdateInfo(null);
+        setUpdateMessage(t('language') === 'zh' ? '最新' : 'Latest');
+      }
+    } catch (err: any) {
+      console.error(err);
+      if (err && err.status === 403) {
+        setUpdateMessage(t('language') === 'zh' ? '限流' : 'Rate limited');
+      } else {
+        setUpdateMessage(t('language') === 'zh' ? '网络错误' : 'Net error');
+      }
+    } finally {
+      setCheckingUpdate(false);
+      setTimeout(() => {
+        setUpdateMessage(null);
+      }, 3000);
+    }
+  }, [checkingUpdate, t]);
+
   return (
     <div style={styles.container}>
       <div style={styles.row}>
@@ -84,6 +252,39 @@ export function Header() {
             }}
           />
           <span style={styles.title}>Tripo4AE</span>
+          <span style={styles.versionText}>
+            v{pkg.version}{typeof __COMMIT_HASH__ !== 'undefined' && __COMMIT_HASH__ ? ` (${__COMMIT_HASH__})` : ''}
+            <a
+              href="#"
+              onClick={handleManualCheck}
+              style={styles.checkUpdateLink}
+              title={t('checkUpdateLinkText')}
+            >
+              {checkingUpdate ? '...' : updateMessage ? ` (${updateMessage})` : ` (${t('checkUpdateLinkText')})`}
+            </a>
+          </span>
+
+          {updateInfo && (
+            <button
+              onClick={() => {
+                try {
+                  if (typeof window.cep !== 'undefined') {
+                    const cs = new CSInterface();
+                    cs.openURLInDefaultBrowser(updateInfo.url);
+                  } else {
+                    window.open(updateInfo.url, '_blank');
+                  }
+                } catch (err) {
+                  window.open(updateInfo.url, '_blank');
+                }
+              }}
+              style={styles.updateBadge}
+              title={t('updateAvailableTooltip')}
+            >
+              🆕 {updateInfo.version}{updateInfo.commit ? ` (${updateInfo.commit.substring(0, 7)})` : ''}
+            </button>
+          )}
+
           {isConnected && (
             <span style={styles.balance}>
               ({balance} {t('credits')})
@@ -283,6 +484,31 @@ const styles: Record<string, React.CSSProperties> = {
   onboardingLink: {
     color: '#4a9eff',
     textDecoration: 'none',
+    cursor: 'pointer',
+  },
+  versionText: {
+    fontSize: 9,
+    color: '#666',
+    marginLeft: 4,
+    alignSelf: 'center',
+  },
+  updateBadge: {
+    fontSize: 9,
+    color: '#fff',
+    backgroundColor: '#ff9800',
+    border: 'none',
+    borderRadius: 3,
+    padding: '1px 4px',
+    marginLeft: 6,
+    cursor: 'pointer',
+    fontWeight: 'bold',
+    alignSelf: 'center',
+  },
+  checkUpdateLink: {
+    color: '#666',
+    textDecoration: 'none',
+    fontSize: 8,
+    marginLeft: 3,
     cursor: 'pointer',
   },
 };

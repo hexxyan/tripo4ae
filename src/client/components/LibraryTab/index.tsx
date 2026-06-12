@@ -9,6 +9,7 @@ import type { ModelRecord, AnimTemplate } from '../../../shared/types';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { ThumbnailImage } from '../common/ThumbnailImage';
 
 export function LibraryTab() {
   const models = useStore((s) => s.models);
@@ -17,8 +18,11 @@ export function LibraryTab() {
   const apiKey = useStore((s) => s.apiKey);
   const templates = useStore((s) => s.templates);
   const pipeline = useStore((s) => s.pipeline);
+  const updatePipelineStep = useStore((s) => s.updatePipelineStep);
   const csInterface = useCsInterface();
   const { t } = useTranslation();
+
+  const api = React.useMemo(() => apiKey ? new TripoApiService(apiKey) : null, [apiKey]);
 
   const [error, setError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
@@ -144,6 +148,7 @@ export function LibraryTab() {
         format: 'GLB',
         modelPath: localPath,
         thumbnailUrl: task.output?.rendered_image,
+        thumbnailPath: TripoApiService.getLocalThumbnailPath(taskId),
         workflow: 'advanced3d',
         createdAt: Date.now(),
         pipelineSteps: [],
@@ -223,6 +228,7 @@ export function LibraryTab() {
         name: getStepName(step),
         prompt: step.params?.prompt || '',
         thumbnailUrl: task.output?.rendered_image,
+        thumbnailPath: TripoApiService.getLocalThumbnailPath(step.taskId),
         modelPath: localPath,
         format: workflow === 'element3d' ? 'OBJ' : 'GLB',
         workflow,
@@ -363,11 +369,20 @@ export function LibraryTab() {
             <div key={model.id} style={styles.modelCard}>
               {/* Thumbnail */}
               <div style={styles.thumbnail}>
-                {model.thumbnailUrl ? (
-                  <img src={model.thumbnailUrl} style={styles.thumbImg} alt={model.name} />
-                ) : (
-                  <span style={styles.thumbPlaceholder}>3D</span>
-                )}
+                <ThumbnailImage
+                  taskId={model.taskId}
+                  thumbnailUrl={model.thumbnailUrl}
+                  thumbnailPath={model.thumbnailPath}
+                  api={new TripoApiService(apiKey!)}
+                  onUpdate={(newUrl, newLocalPath) => {
+                    upsertModel({
+                      ...model,
+                      thumbnailUrl: newUrl,
+                      thumbnailPath: newLocalPath,
+                    });
+                  }}
+                  style={styles.thumbImg}
+                />
               </div>
 
               {/* Info */}
@@ -461,8 +476,30 @@ export function LibraryTab() {
                   <div key={step.taskId} style={styles.historyCard}>
                     {/* Thumbnail */}
                     <div style={styles.historyThumbnail}>
-                      {step.output?.rendered_image ? (
-                        <img src={step.output?.rendered_image} style={styles.thumbImg} alt="Thumbnail" />
+                      {step.taskId && api ? (
+                        <ThumbnailImage
+                          taskId={step.taskId}
+                          thumbnailUrl={step.output?.rendered_image}
+                          thumbnailPath={step.thumbnailPath}
+                          api={api}
+                          onUpdate={(newUrl, newLocalPath) => {
+                            const globalPipeline = useStore.getState().pipeline;
+                            const globalIndex = globalPipeline.findIndex((s) => s.taskId === step.taskId);
+                            if (globalIndex !== -1) {
+                              updatePipelineStep(globalIndex, {
+                                output: {
+                                  ...globalPipeline[globalIndex].output,
+                                  rendered_image: newUrl,
+                                },
+                                thumbnailPath: newLocalPath,
+                              });
+                            }
+                          }}
+                          style={styles.thumbImg}
+                          fallbackText={thumbIcon[step.type] || '3D'}
+                        />
+                      ) : step.output?.rendered_image ? (
+                        <img src={step.output.rendered_image} style={styles.thumbImg} alt="Thumbnail" />
                       ) : (
                         <span style={{ fontSize: 9, color: '#888' }}>{thumbIcon[step.type] || '3D'}</span>
                       )}

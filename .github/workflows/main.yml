@@ -51,6 +51,11 @@ jobs:
             com.tripo4ae.panel.zip
           if-no-files-found: error
 
+      - name: Generate latest.json for rate-limit-free updates
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "{\"version\": \"${{ github.ref_name }}\", \"commit\": \"${{ github.sha }}\", \"url\": \"https://github.com/hexxyan/tripo4ae/releases/tag/${{ github.ref_name }}\", \"notes\": \"See release details at: https://github.com/hexxyan/tripo4ae/releases/tag/${{ github.ref_name }}\"}" > latest.json
+
       - name: GitHub Release (On Tag Push)
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
@@ -61,6 +66,7 @@ jobs:
             dist/zxp/com.tripo4ae.panel.zxp
             dist/zip/Tripo4AE_*.zip
             com.tripo4ae.panel.zip
+            latest.json
           draft: false
           prerelease: false
           generate_release_notes: true

@@ -49,7 +49,7 @@ const config: CEP_Config = {
   zxp: {
     country: "US",
     province: "CA",
-    org: "Company",
+    org: "github @hexxyan",
     password: "password",
     tsa: [
       "http://timestamp.digicert.com/", // Windows Only

@@ -270,4 +270,77 @@ describe('TripoApiService', () => {
       expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/image.png');
     });
   });
+
+  // ---- 6. downloadThumbnail ----
+
+  describe('downloadThumbnail()', () => {
+    it('downloads the rendered image thumbnail to the correct path', async () => {
+      const task: TripoTask = {
+        task_id: 'task-thumb-111',
+        type: 'text_to_model',
+        status: 'success',
+        input: { prompt: 'a cute model' },
+        output: {
+          rendered_image: 'https://cdn.example.com/render.png',
+        },
+        progress: 100,
+        create_time: 1700000000,
+      };
+
+      const binaryData = new Uint8Array([9, 8, 7]);
+      const blobResp = {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => binaryData.buffer,
+      } as unknown as Response;
+
+      const fetchMock = jest.fn().mockResolvedValue(blobResp);
+      globalThis.fetch = fetchMock;
+
+      const saveDir = '/tmp/models';
+      const expectedPath = '/tmp/models/task-thumb-111_thumb.png';
+
+      const result = await api.downloadThumbnail(task, saveDir);
+
+      expect(result).toBe(expectedPath);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://cdn.example.com/render.png',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expectedPath,
+        expect.any(Buffer)
+      );
+    });
+
+    it('returns undefined if task has no rendered_image', async () => {
+      const task: TripoTask = {
+        task_id: 'task-no-thumb',
+        type: 'text_to_model',
+        status: 'success',
+        input: {},
+        progress: 100,
+        create_time: 1700000000,
+      };
+
+      const result = await api.downloadThumbnail(task, '/tmp');
+      expect(result).toBeUndefined();
+    });
+  });
+
+  // ---- 7. getLocalThumbnailPath ----
+
+  describe('getLocalThumbnailPath()', () => {
+    it('returns the correct local path format', () => {
+      const taskId = 'task-path-xyz';
+      const result = TripoApiService.getLocalThumbnailPath(taskId);
+
+      // Since homedir returns /tmp in test setup:
+      // saveDir is /tmp/Documents/Tripo4AE/Models
+      // expectedPath is /tmp/Documents/Tripo4AE/Models/task-path-xyz_thumb.png
+      expect(result).toContain('task-path-xyz_thumb.png');
+      expect(result).toContain('Documents');
+      expect(result).toContain('Tripo4AE');
+    });
+  });
 });
