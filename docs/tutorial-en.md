@@ -57,12 +57,17 @@ Restart After Effects. Open the panel via **Window → Extensions → Tripo4AE**
 
 ## 2. Connecting to Tripo API
 
-1. Open the Tripo4AE panel
-2. Enter your Tripo API Key in the header input
-3. Click **Connect**
-4. On success, the status dot turns green and your credit balance appears
+1. Open the Tripo4AE panel.
+2. **Onboarding Guidance**: If you don't have an API Key yet, click the link below the input field: **"Register on Tripo to get free credits"** to jump directly to the Tripo platform.
+3. Enter your Tripo API Key (API Keys typically start with the `tsk_` prefix).
+4. Click **Connect**.
+5. **Format & Troubleshooting**:
+   - The plugin runs a client-side format validation.
+   - If your balance is 0 or negative, it prompts a credit balance warning.
+   - If the connection drops or is unauthorized (HTTP 401/403), a descriptive troubleshooting tip is shown.
+6. On success, the status dot turns green and your credit balance appears.
 
-Your API Key is persisted in localStorage — no need to re-enter it next session.
+Your API Key is persisted — no need to re-enter it next session.
 
 ---
 
@@ -70,53 +75,29 @@ Your API Key is persisted in localStorage — no need to re-enter it next sessio
 
 Open the **Generate** tab. Three input modes are available:
 
-### Mode 1: Text to 3D
+- **Text to 3D (Text)**
+- **Image to 3D (Image)**
+- **Multiview to 3D (Multiview)**
 
-1. Click **Text** in the mode toggle
-2. Describe your desired model in the Prompt field, e.g.:
-   - "a cute cartoon cat sitting on a chair"
-   - "futuristic sci-fi helmet with glowing visor"
-3. (Optional) Fill in Negative Prompt to exclude unwanted elements
-4. (Optional) Pick a style preset (Clay, Steampunk, Christmas, Barbie, Gold, Ancient Bronze, etc.)
-5. Adjust parameters in the expandable panel:
-   - **Model Version**: v3.1 (latest high-quality) or Turbo (fast draft)
-   - **Face Limit**: Low (3k), Medium (10k), High (20k), or Auto
-   - **PBR**: Enable for physically-based rendering materials
-   - **Quad**: Generate quad meshes
-   - **Quality**: standard / detailed
-   - **Seeds**: Set model/texture seeds for reproducible results
-6. Click **Generate** and watch the progress bar
-
-### Mode 2: Image to 3D
-
-1. Click **Image** in the mode toggle
-2. Drag-and-drop or click to upload a reference image (PNG, JPG supported)
-3. The image uploads to Tripo cloud automatically
-4. Adjust parameters and click **Generate**
-
-> **Tip**: Cleaner backgrounds and sharper images produce better results.
-
-### Mode 3: Multiview to 3D
-
-1. Click **Multiview** in the mode toggle
-2. Upload front, left, back, and right view images (at least one required)
-3. Click **Generate**
-
-> **Tip**: More views = better model quality.
+> [!TIP]
+> **Expandable Settings**:
+> Technical parameters like Face Limit, Mesh Quad, Model Seed, and Quality multipliers are folded under the **"Advanced Options"** panel by default. Designers only need to type a prompt or upload an image to hit generate, reducing visual complexity.
 
 ---
 
 ## 4. Importing into After Effects
 
-After generation completes, the result preview shows a rendered image and task details. The plugin supports two core import workflows (switched on the Generate tab):
+After generation completes, the result preview shows the generated 3D model.
 
-### 1. Native Advanced 3D Workflow (Recommended)
+Instead of selecting the import workflow before generating, **the import buttons are now shown dynamically on the completed model preview**. This allows you to inspect the generation quality before choosing how to load the asset:
 
-Directly imports the `.glb` model as a native AE 2024+ **3D Model Layer**. Clicking **Import to AE** will:
+### 1. Native 3D Layer (AE Native / Advanced 3D)
+
+Directly imports the `.glb` model as a native AE 2024+ **3D Model Layer**. Clicking this button will:
 1. Download the GLB model to your local `~/Documents/Tripo4AE/Models/` directory.
 2. Import the asset and create a 3D model layer, centering it in the active composition.
-3. Switch the composition's renderer to **Advanced 3D** (Mercury 3D Engine) automatically.
-4. Enable Time Remap on the layer to allow playing embedded skeletal animations.
+3. Switch the composition's renderer to **Advanced 3D** (Mercury 3D Engine) automatically to enable PBR rendering.
+4. Enable Time Remap on the layer to play embedded skeletal animations.
 5. Save the task details into the local Library.
 
 > **Tip**: If no composition is open, the plugin automatically creates a default 1920×1080, 10s, 30fps composition.
@@ -171,41 +152,52 @@ Apply new PBR textures to an existing model:
 
 Open the **Animation** tab.
 
-### Step 1: Pre-Rig Check
+### ✨ One-Click Rig & Animate Wizard (Magic Animate) - Recommended!
+
+The plugin provides an automated **"One-Click Rig & Animate Wizard (Magic Animate)"** panel to combine the traditional 3-step manual rigging/retargeting workflow into a single click:
+
+1. **Select & Configure**: Pick your draft model in the **Source Model** dropdown, select up to 5 animations from the preset lists, and check "Animate in Place" if needed.
+2. **Launch Wizard**: Click the **"One-Click Rig & Animate (Magic Animate)"** button.
+3. **Automated Pipeline**: The plugin will execute all cloud operations in sequence automatically:
+   - Initiates `Pre-Rig Check` and verifies suitability.
+   - Submits the `Auto-Rig` task and tracks progress, then downloads the rigged model.
+   - Automatically submits the `Retarget` animation task on the rigged model.
+   - Downloads the final animated GLB and imports it directly into your AE composition.
+   - Configures Time Remap and sets up loop expressions on the layer automatically.
+
+If you prefer micro-managing each step, you can use the traditional manual steps:
+
+### Manual Step 1: Pre-Rig Check
 
 1. Select a pipeline model in **Source Model**
 2. Click **Check Rig-ability**
 3. Check the result: whether it's riggable and the detected rig type
 
-### Step 2: Rig the Model
+### Manual Step 2: Rig the Model
 
-1. Choose a **Rig Type**:
-   - **Biped**: Humanoid
-   - **Quadruped**: Four-legged animal
-   - **Hexapod**: Six-legged
-   - **Octopod**: Eight-legged
-   - **Avian**: Bird
-   - **Serpentine**: Snake
-   - **Aquatic**: Fish
+1. Choose a **Rig Type** (such as Biped, Quadruped, etc.)
 2. Select output format (GLB or FBX) and rig spec (Tripo or Mixamo)
-3. Click **Rig Model**
-4. The rigged model is automatically downloaded and imported to AE
+3. Click **Rig Model** to process and import.
 
-### Step 3: Retarget Animation
+### Manual Step 3: Retarget Animation
 
-Apply preset animations to a rigged model:
-
-1. Browse the categorized animation list and select up to 5:
-   - **Basic**: idle, walk, run, jump, fall, dive, climb/flip
-   - **Combat**: slash, shoot, hurt
-   - **Dance**: 6 different dance moves
-   - **Performance**: sing, clap, cheer, laugh, cry, bow, wave, etc.
-   - **Sports**: golf, basketball, volleyball, swim, surf
-   - **Daily**: sit, hug, scratch, phone
-   - **Cross-Species**: Universal animations for non-biped rigs
+1. Select animations from basic, combat, dance, performance, sports, daily, or cross-species categories.
 2. (Optional) Check **Animate in Place** to keep the character in position
-3. Click **Retarget**
-4. The animated model is automatically imported to AE
+3. Click **Retarget** to download and import (requires a completed Rig model as Source).
+
+---
+
+## 7. 3D Scene Controls & Lighting Settings
+
+### 1. Real-Time Light & Shadow Controls
+Under **"Scene Setup"** in the **Animation** tab, you can configure and dynamically control lighting in the composition:
+- **Setup Scene**: Click to automatically configure a camera rig (with Andrew Kramer's Classic Null Controller), three-point lights (Key, Fill, Rim), and a shadow-catcher ground plane.
+- **Real-Time Sliders**: Tweak light settings and watch them update instantly in AE without rebuilding:
+  - **Environment Intensity**: Adjust HDRI background ambient light.
+  - **Key Light Angle** & **Key Light Intensity**: Adjust key lamp brightness and rotation.
+  - **Shadow Darkness** & **Shadow Diffusion (Softness)**: Adjust Key light projection properties.
+- **Visual HDR Card Gallery**: Instead of text dropdowns, choose from 8 royalty-free CC0 HDRI environments represented by gradient card swatches (Studio Soft, Sunset Glow, City Lights, Kiara Dawn, etc.) with description subtitles. Click a card to download and load it as the environment map.
+- **Auto Ground Alignment**: The ground plane is automatically aligned to the bottom boundary of the first 3D model layer in the comp, removing the need for manual alignment.
 
 > **Note**: You must Rig first, then select the Rig result as the Source Model before Retargeting.
 
@@ -268,17 +260,24 @@ Export models to other formats:
 
 ---
 
-## 8. Model Library
+## 8. Model Library & Local 3D Preview
 
 Open the **Library** tab.
 
-### Model List
+### 🔍 Search & Filter Chips
+Manage your local model database using the controls at the top of the Library tab:
+- **Search Bar**: Perform case-insensitive searches across model prompts or custom names.
+- **Filter Chips**:
+  - **All**: Show all assets in the library.
+  - **Imported**: Show only assets currently used in your AE comps.
+  - **Animated**: Show assets that have skeletons or have undergone retargeting.
+  - **Stylized**: Show assets processed with Lego, Voxel, or Minecraft presets.
 
-All models imported through the plugin are tracked in the library with:
-- Thumbnail preview
-- Model name and format
-- Creation timestamp
-- Pipeline step indicators (colored dots: green = success, yellow = running, red = failed)
+### 👁️ Local WebGL 3D Preview
+Each model card in the library contains a **Preview (👁️)** button:
+- **How it works**: Clicking preview opens a lightweight WebGL viewport. The plugin reads the local GLB file via Node.js `fs`, converts it to a temporary Blob URL, and feeds it directly into Three.js `GLTFLoader`.
+- **Interactions**: Drag the mouse to rotate/orbit the model, and scroll to zoom. The camera automatically centers and fits the model's bounding box.
+- **Resource Disposal**: Closing the viewport triggers full memory garbage collection (unsubscribing animations, revoking Blob URLs, and disposing WebGL renderer contexts, geometries, materials, and textures) to prevent AE memory leaks.
 
 ### Actions
 
