@@ -16,10 +16,10 @@ const config: CEP_Config = {
   ],
 
   type: "Panel",
-  iconDarkNormal: "./src/assets/light-icon.png",
-  iconNormal: "./src/assets/dark-icon.png",
-  iconDarkNormalRollOver: "./src/assets/light-icon.png",
-  iconNormalRollOver: "./src/assets/dark-icon.png",
+  // iconDarkNormal: "./src/assets/light-icon.png",
+  // iconNormal: "./src/assets/dark-icon.png",
+  // iconDarkNormalRollOver: "./src/assets/light-icon.png",
+  // iconNormalRollOver: "./src/assets/dark-icon.png",
   parameters: [
     "--v=0",
     "--enable-nodejs",
@@ -49,7 +49,7 @@ const config: CEP_Config = {
   zxp: {
     country: "US",
     province: "CA",
-    org: "github @hexxyan",
+    org: "github-hexxyan",
     password: "password",
     tsa: [
       "http://timestamp.digicert.com/", // Windows Only

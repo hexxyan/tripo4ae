@@ -5,7 +5,16 @@ import babel from "@rollup/plugin-babel";
 import { jsxInclude, jsxBin, jsxPonyfill } from "vite-cep-plugin";
 import { CEP_Config } from "vite-cep-plugin";
 import json from "@rollup/plugin-json";
+import replace from "@rollup/plugin-replace";
 import path from "path";
+import { execSync } from "child_process";
+
+let commitHash = "";
+try {
+  commitHash = execSync("git rev-parse --short HEAD").toString().trim();
+} catch (e) {
+  console.warn("Failed to get git commit hash:", e);
+}
 
 const GLOBAL_THIS = "thisObj";
 
@@ -28,6 +37,12 @@ export const extendscriptConfig = (
         : cepConfig.build?.sourceMap,
     },
     plugins: [
+      replace({
+        preventAssignment: true,
+        values: {
+          __COMMIT_HASH__: JSON.stringify(commitHash),
+        },
+      }),
       json(),
       nodeResolve({
         extensions,

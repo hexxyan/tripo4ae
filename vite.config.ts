@@ -63,7 +63,7 @@ export default defineConfig({
     cep(config),
   ],
   resolve: {
-    alias: [{ find: "@esTypes", replacement: path.resolve(__dirname, "src") }],
+    alias: [{ find: "@esTypes", replacement: path.resolve(__dirname, "src/jsx") }],
   },
   root,
   clearScreen: false,

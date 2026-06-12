@@ -33,13 +33,45 @@ export class TripoHttpClient {
     };
   }
 
-  async get<T = unknown>(path: string): Promise<T> {
+  async get<T = unknown>(path: string, options: PostOptions = {}): Promise<T> {
+    const { maxRetries = 3, baseDelay = 1000 } = options;
     const url = `${this.baseUrl}${path}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.getHeaders(),
-    });
-    return this.handleResponse<T>(response);
+
+    let lastError: TripoError | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'GET',
+          headers: this.getHeaders(),
+        });
+      } catch (err: any) {
+        lastError = err;
+        if (attempt < maxRetries) {
+          const backoff = baseDelay * Math.pow(2, attempt);
+          await this.delay(backoff);
+          continue;
+        }
+        throw err;
+      }
+
+      if (response.status === 429 || response.status >= 500) {
+        if (response.status === 429) await response.text().catch(() => {});
+        const err = new Error(`HTTP ${response.status}: ${response.statusText}`) as TripoError;
+        err.status = response.status;
+        lastError = err;
+        if (attempt < maxRetries) {
+          const backoff = baseDelay * Math.pow(2, attempt);
+          await this.delay(backoff);
+          continue;
+        }
+      }
+
+      return await this.handleResponse<T>(response);
+    }
+
+    throw lastError ?? new Error('Max retries exceeded');
   }
 
   async post<T = unknown>(
@@ -70,9 +102,10 @@ export class TripoHttpClient {
         throw err;
       }
 
-      if (response.status === 429) {
-        const err = new Error('HTTP 429: Too Many Requests') as TripoError;
-        err.status = 429;
+      if (response.status === 429 || response.status >= 500) {
+        if (response.status === 429) await response.text().catch(() => {});
+        const err = new Error(`HTTP ${response.status}: ${response.statusText}`) as TripoError;
+        err.status = response.status;
         lastError = err;
         if (attempt < maxRetries) {
           const backoff = baseDelay * Math.pow(2, attempt);
@@ -115,9 +148,10 @@ export class TripoHttpClient {
         throw err;
       }
 
-      if (response.status === 429) {
-        const err = new Error('HTTP 429: Too Many Requests') as TripoError;
-        err.status = 429;
+      if (response.status === 429 || response.status >= 500) {
+        if (response.status === 429) await response.text().catch(() => {});
+        const err = new Error(`HTTP ${response.status}: ${response.statusText}`) as TripoError;
+        err.status = response.status;
         lastError = err;
         if (attempt < maxRetries) {
           const backoff = baseDelay * Math.pow(2, attempt);

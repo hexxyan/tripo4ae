@@ -254,9 +254,9 @@ describe('TaskPoller', () => {
       expect(delaySpy).toHaveBeenCalledTimes(2);
 
       // First call: running_left_time=10 => max(2000, 5000) = 5000
-      expect(delaySpy).toHaveBeenNthCalledWith(1, 5000);
+      expect(delaySpy).toHaveBeenNthCalledWith(1, 5000, undefined);
       // Second call: running_left_time=1 => max(2000, 500) = 2000
-      expect(delaySpy).toHaveBeenNthCalledWith(2, 2000);
+      expect(delaySpy).toHaveBeenNthCalledWith(2, 2000, undefined);
     });
 
     it('falls back to configured interval when running_left_time is absent', async () => {
@@ -277,7 +277,7 @@ describe('TaskPoller', () => {
       });
 
       // Without running_left_time, should use configured interval of 3000
-      expect(delaySpy).toHaveBeenCalledWith(3000);
+      expect(delaySpy).toHaveBeenCalledWith(3000, undefined);
     });
   });
 });

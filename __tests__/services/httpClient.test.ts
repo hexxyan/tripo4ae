@@ -41,6 +41,8 @@ describe('TripoHttpClient', () => {
   beforeEach(() => {
     jest.restoreAllMocks();
     client = new TripoHttpClient(API_KEY);
+    // Mock delay to avoid real delays in tests when retries occur
+    jest.spyOn(client as any, 'delay').mockResolvedValue(undefined);
   });
 
   // ---- 1. Constructor & headers ----

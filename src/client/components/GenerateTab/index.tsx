@@ -377,7 +377,6 @@ export function GenerateTab() {
 
     return () => {
       cancelled = true;
-      resumedTaskRef.current = null;
     };
   }, [apiKey, isGenerating, isImporting, pipeline, pollGenerationTask]);
 

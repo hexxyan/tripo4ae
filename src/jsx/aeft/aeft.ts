@@ -395,9 +395,9 @@ export function applyAnimation(configJson: string): string {
         case "scale-pop": {
           var scale = layer.property("Scale");
           if (scale) {
-            setKeyframe(scale, startTime, [0, 0], undefined, ease.outEase);
-            setKeyframe(scale, startTime + duration * 0.7, [110, 110], ease.inEase, ease.outEase);
-            setKeyframe(scale, startTime + duration, [100, 100], ease.inEase, undefined);
+            setKeyframe(scale, startTime, [0, 0, 0], undefined, ease.outEase);
+            setKeyframe(scale, startTime + duration * 0.7, [110, 110, 110], ease.inEase, ease.outEase);
+            setKeyframe(scale, startTime + duration, [100, 100, 100], ease.inEase, undefined);
           }
           break;
         }
@@ -424,8 +424,8 @@ export function applyAnimation(configJson: string): string {
           if (scaleEp) {
             // Remove all existing scale keyframes
             while (scaleEp.numKeys > 0) scaleEp.removeKey(1);
-            setKeyframe(scaleEp, startTime, [0, 0]);
-            setKeyframe(scaleEp, startTime + 0.5, [100, 100]);
+            setKeyframe(scaleEp, startTime, [0, 0, 0]);
+            setKeyframe(scaleEp, startTime + 0.5, [100, 100, 100]);
             // Apply elastic bounce expression on scale
             scaleEp.expression =
               "// Tripo4AE Elastic Pop Expression\n" +
@@ -434,9 +434,9 @@ export function applyAnimation(configJson: string): string {
               "if (t < dur) {\n" +
               "  var progress = t / dur;\n" +
               "  var bounce = Math.sin(progress * Math.PI * 3) * (1 - progress) * 30;\n" +
-              "  [100 + bounce, 100 + bounce];\n" +
+              "  [100 + bounce, 100 + bounce, 100 + bounce];\n" +
               "} else {\n" +
-              "  [100, 100];\n" +
+              "  [100, 100, 100];\n" +
               "}";
           }
           break;

@@ -96,7 +96,7 @@ export function useCsInterface() {
   const importModel = useCallback(
     (filePath: string, config?: ImportConfig): Promise<any> => {
       if (config) {
-        const json = JSON.stringify(config).replace(/'/g, "\\'");
+        const json = escapeForEval(JSON.stringify(config));
         return evalScript(`tripo4ae.importModel('${escapeForEval(filePath)}', '${json}')`);
       }
       return evalScript(`tripo4ae.importModel('${escapeForEval(filePath)}')`);
@@ -106,7 +106,7 @@ export function useCsInterface() {
 
   const applyAnimation = useCallback(
     (config: AnimationConfig): Promise<any> => {
-      const json = JSON.stringify(config).replace(/'/g, "\\'");
+      const json = escapeForEval(JSON.stringify(config));
       return evalScript(`tripo4ae.applyAnimation('${json}')`);
     },
     [evalScript],
@@ -114,7 +114,7 @@ export function useCsInterface() {
 
   const selectEmbeddedAnimation = useCallback(
     (config: EmbeddedAnimationConfig): Promise<any> => {
-      const json = JSON.stringify(config).replace(/'/g, "\\'");
+      const json = escapeForEval(JSON.stringify(config));
       return evalScript(`tripo4ae.selectEmbeddedAnimation('${json}')`);
     },
     [evalScript],
@@ -122,7 +122,7 @@ export function useCsInterface() {
 
   const createCamera = useCallback(
     (config: any): Promise<any> => {
-      const json = JSON.stringify(config).replace(/'/g, "\\'");
+      const json = escapeForEval(JSON.stringify(config));
       return evalScript(`tripo4ae.createCamera('${json}')`);
     },
     [evalScript],
@@ -130,7 +130,7 @@ export function useCsInterface() {
 
   const createLights = useCallback(
     (config: any): Promise<any> => {
-      const json = JSON.stringify(config).replace(/'/g, "\\'");
+      const json = escapeForEval(JSON.stringify(config));
       return evalScript(`tripo4ae.createLights('${json}')`);
     },
     [evalScript],
@@ -144,7 +144,7 @@ export function useCsInterface() {
 
   const setMaterialProperties = useCallback(
     (config: { layerIndex?: number; material: MaterialProperties }): Promise<any> => {
-      const json = JSON.stringify(config).replace(/'/g, "\\'");
+      const json = escapeForEval(JSON.stringify(config));
       return evalScript(`tripo4ae.setMaterialProperties('${json}')`);
     },
     [evalScript],
@@ -163,7 +163,7 @@ export function useCsInterface() {
   const createEnvironmentLight = useCallback(
     (config?: EnvironmentLightConfig): Promise<any> => {
       if (config) {
-        const json = JSON.stringify(config).replace(/'/g, "\\'");
+        const json = escapeForEval(JSON.stringify(config));
         return evalScript(`tripo4ae.createEnvironmentLight('${json}')`);
       }
       return evalScript('tripo4ae.createEnvironmentLight()');
@@ -173,7 +173,7 @@ export function useCsInterface() {
 
   const applyMaterialPreset = useCallback(
     (config: { layerIndex?: number; preset: string; overrides?: Record<string, number> }): Promise<any> => {
-      const json = JSON.stringify(config).replace(/'/g, "\\'");
+      const json = escapeForEval(JSON.stringify(config));
       return evalScript(`tripo4ae.applyMaterialPreset('${json}')`);
     },
     [evalScript],
@@ -187,7 +187,7 @@ export function useCsInterface() {
   const setupScene = useCallback(
     (config?: Record<string, any>): Promise<any> => {
       if (config) {
-        const json = JSON.stringify(config).replace(/'/g, "\\'");
+        const json = escapeForEval(JSON.stringify(config));
         return evalScript(`tripo4ae.setupScene('${json}')`);
       }
       return evalScript('tripo4ae.setupScene()');
@@ -197,7 +197,7 @@ export function useCsInterface() {
 
   const updateSceneProperties = useCallback(
     (config: Record<string, any>): Promise<any> => {
-      const json = JSON.stringify(config).replace(/'/g, "\\'");
+      const json = escapeForEval(JSON.stringify(config));
       return evalScript(`tripo4ae.updateSceneProperties('${json}')`);
     },
     [evalScript],
@@ -205,7 +205,7 @@ export function useCsInterface() {
 
   const createParametricMesh = useCallback(
     (config: { meshType: string; color?: number[]; materialPreset?: string; curvature?: number; segments?: number; extrusionDepth?: number; bevelDepth?: number }): Promise<any> => {
-      const json = JSON.stringify(config).replace(/'/g, "\\'");
+      const json = escapeForEval(JSON.stringify(config));
       return evalScript(`tripo4ae.createParametricMesh('${json}')`);
     },
     [evalScript],

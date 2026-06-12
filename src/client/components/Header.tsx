@@ -26,9 +26,9 @@ async function fetchLatestVersionInfo(): Promise<{ version: string; url: string;
         const data = await res.json();
         if (data && data.version) {
           const version = data.version.startsWith('v') ? data.version : `v${data.version}`;
-          const url = data.url || `https://github.com/${repo}/releases`;
+          const releaseUrl = data.url || `https://github.com/${repo}/releases`;
           const commit = data.commit || undefined;
-          return { version, url, commit };
+          return { version, url: releaseUrl, commit };
         }
       }
     } catch (e) {
@@ -83,7 +83,7 @@ export function Header() {
                 (pkg.version === cache.latestVersion &&
                   cache.latestCommit &&
                   localCommit &&
-                  !cache.latestCommit.toLowerCase().startsWith(localCommit.toLowerCase()));
+                  !(cache.latestCommit.toLowerCase().startsWith(localCommit.toLowerCase()) || localCommit.toLowerCase().startsWith(cache.latestCommit.toLowerCase())));
 
               if (isUpdateAvailable) {
                 setUpdateInfo({ version: cache.latestVersion, url: cache.releaseUrl, commit: cache.latestCommit });
@@ -116,7 +116,7 @@ export function Header() {
           (pkg.version === latestVersion &&
             latestCommit &&
             localCommit &&
-            !latestCommit.toLowerCase().startsWith(localCommit.toLowerCase()));
+            !(latestCommit.toLowerCase().startsWith(localCommit.toLowerCase()) || localCommit.toLowerCase().startsWith(latestCommit.toLowerCase())));
 
         if (isUpdateAvailable) {
           setUpdateInfo({ version: latestVersion, url: releaseUrl, commit: latestCommit });
@@ -217,7 +217,7 @@ export function Header() {
         (pkg.version === latestVersion &&
           latestCommit &&
           localCommit &&
-          !latestCommit.toLowerCase().startsWith(localCommit.toLowerCase()));
+          !(latestCommit.toLowerCase().startsWith(localCommit.toLowerCase()) || localCommit.toLowerCase().startsWith(latestCommit.toLowerCase())));
 
       if (isUpdateAvailable) {
         setUpdateInfo({ version: latestVersion, url: releaseUrl, commit: latestCommit });

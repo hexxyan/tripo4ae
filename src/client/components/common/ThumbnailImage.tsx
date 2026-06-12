@@ -25,6 +25,10 @@ export function ThumbnailImage({
   const [errorCount, setErrorCount] = useState<number>(0);
 
   useEffect(() => {
+    setErrorCount(0);
+  }, [taskId]);
+
+  useEffect(() => {
     let active = true;
     const loadThumbnail = async () => {
       setLoading(true);
@@ -66,7 +70,12 @@ export function ThumbnailImage({
     return () => {
       active = false;
     };
-  }, [thumbnailPath, thumbnailUrl]);
+  }, [thumbnailPath, thumbnailUrl, taskId]);
+
+  const isMountedRef = React.useRef(true);
+  useEffect(() => {
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   const handleError = async () => {
     // If it's already a base64 data URI, don't attempt to refresh
@@ -90,11 +99,13 @@ export function ThumbnailImage({
           }
         }
 
-        if (onUpdate) {
-          onUpdate(newUrl, localPath);
-        } else {
-          // Fallback UI-only update if no callback provided
-          setSrc(newUrl);
+        if (isMountedRef.current) {
+          if (onUpdate) {
+            onUpdate(newUrl, localPath);
+          } else {
+            // Fallback UI-only update if no callback provided
+            setSrc(newUrl);
+          }
         }
       }
     } catch (err) {

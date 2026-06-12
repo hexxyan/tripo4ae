@@ -114,11 +114,18 @@ export class TripoApiService {
                 }
 
                 if (res.statusCode !== 200) {
+                  res.resume(); // Drain the body to avoid leaks
                   const errMsg = `Download failed: HTTP ${res.statusCode}`;
                   console.error(`[Tripo4AE] ${errMsg}`, res.headers);
                   reject(new Error(errMsg));
                   return;
                 }
+
+                res.on('error', (streamErr: any) => {
+                  console.error(`[Tripo4AE] Response stream error:`, streamErr);
+                  res.destroy();
+                  reject(streamErr);
+                });
 
                 const totalBytes = parseInt(res.headers['content-length'] || '0', 10);
                 console.log(`[Tripo4AE] Response OK, Content-Length: ${totalBytes || 'unknown'} bytes`);
@@ -130,7 +137,7 @@ export class TripoApiService {
                 res.pipe(fileStream);
 
                 // Inactivity timeout — reset on every data chunk
-                let downloadTimeout = setTimeout(() => {
+                let downloadTimeout: NodeJS.Timeout | undefined = setTimeout(() => {
                   console.error(`[Tripo4AE] Download stalled after ${bytesReceived} bytes`);
                   res.destroy();
                   fileStream.close();
@@ -140,7 +147,7 @@ export class TripoApiService {
 
                 res.on('data', (chunk: Buffer) => {
                   bytesReceived += chunk.length;
-                  clearTimeout(downloadTimeout);
+                  if (downloadTimeout) clearTimeout(downloadTimeout);
                   downloadTimeout = setTimeout(() => {
                     console.error(`[Tripo4AE] Download stalled at ${bytesReceived}/${totalBytes || '?'} bytes`);
                     res.destroy();
@@ -165,15 +172,16 @@ export class TripoApiService {
                 });
 
                 fileStream.on('finish', () => {
-                  clearTimeout(downloadTimeout);
+                  if (downloadTimeout) clearTimeout(downloadTimeout);
                   fileStream.close();
                   console.log(`[Tripo4AE] Download complete: ${savePath} (${bytesReceived} bytes)`);
                   resolve(savePath);
                 });
 
                 fileStream.on('error', (err: any) => {
-                  clearTimeout(downloadTimeout);
+                  if (downloadTimeout) clearTimeout(downloadTimeout);
                   console.error(`[Tripo4AE] File write error:`, err);
+                  fileStream.close();
                   fs.unlink(savePath, () => {});
                   reject(err);
                 });

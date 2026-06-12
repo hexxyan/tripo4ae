@@ -61,7 +61,7 @@ export function TransformTab() {
     }
   }, [apiKey, csInterface, addModel]);
 
-  const modelSteps = pipeline.filter((s) => s.status === 'success' && s.taskId);
+  const modelSteps = React.useMemo(() => pipeline.filter((s) => s.status === 'success' && s.taskId), [pipeline]);
   const [modelStepIdx, setModelStepIdx] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TripoTask | null>(null);

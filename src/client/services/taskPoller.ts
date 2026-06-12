@@ -35,7 +35,6 @@ export class TaskPoller {
   }
 
   async pollUntilDone(taskId: string, options?: PollOptions): Promise<TripoTask> {
-    this._aborted = false;
     const defaultInterval = options?.interval ?? 2000;
     const maxInterval = options?.maxInterval ?? 5000;
     const timeout = options?.timeout ?? 300000;
@@ -86,7 +85,7 @@ export class TaskPoller {
       nextInterval = Math.min(maxInterval, nextInterval);
 
       // Wait before next poll
-      await this.delay(nextInterval);
+      await this.delay(nextInterval, abortSignal);
 
       // Check after delay — the most common time for abort to fire
       if (isAborted()) {
@@ -97,7 +96,16 @@ export class TaskPoller {
     throw new Error(`Max attempts (${maxAttempts}) exceeded while polling task ${taskId}`);
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private delay(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+      if (signal?.aborted) return resolve();
+      const timer = setTimeout(resolve, ms);
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+      }
+    });
   }
 }
