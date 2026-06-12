@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="6.0" ExtensionBundleId="com.tripo4ae.panel" ExtensionBundleVersion="0.0.1"
+<ExtensionManifest Version="6.0" ExtensionBundleId="com.tripo4ae.panel" ExtensionBundleVersion="1.0.0"
                    ExtensionBundleName="Tripo4AE" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 
   <ExtensionList>
-    <Extension Id="com.tripo4ae.panel.main" Version="0.0.1"/>
+    <Extension Id="com.tripo4ae.panel.main" Version="1.0.0"/>
   </ExtensionList>
 
   <ExecutionEnvironment>
