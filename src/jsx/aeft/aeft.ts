@@ -2131,6 +2131,96 @@ export function importTextureToProject(configJson: string): string {
   }
 }
 
+export function linkVfxToJointNull(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var nullName = config.nullName;
+    if (!nullName) {
+      return JSON.stringify({ ok: false, error: "Null name not specified" });
+    }
+
+    // Find the Null layer
+    var nullLayer = null;
+    for (var i = 1; i <= comp.numLayers; i++) {
+      var lyr = comp.layer(i);
+      if (lyr.name === nullName) {
+        nullLayer = lyr;
+        break;
+      }
+    }
+
+    if (!nullLayer) {
+      return JSON.stringify({ ok: false, error: "Null layer '" + nullName + "' not found in active composition." });
+    }
+
+    app.beginUndoGroup("Tripo4AE Link VFX to Null");
+
+    var vfxType = config.type || "light";
+    var createdLayer = null;
+
+    if (vfxType === "light") {
+      // Create a Point Light
+      var lightLayer = comp.layers.addLight("Tripo4AE_" + nullName.replace("Tripo4AE_", "") + "_Light", [0, 0]);
+      lightLayer.lightType = LightType.POINT;
+      lightLayer.threeDLayer = true;
+      lightLayer.parent = nullLayer;
+      
+      // Reset position relative to parent null
+      var posProp = lightLayer.property("Position");
+      if (posProp) {
+        posProp.setValue([0, 0, 0]);
+      }
+      createdLayer = lightLayer;
+    } else if (vfxType === "particular") {
+      // Create a Point Light named "Emitter" parented to the Null
+      var emitterLight = comp.layers.addLight("Emitter " + nullName.replace("Tripo4AE_", "").replace("_Track", ""), [0, 0]);
+      emitterLight.lightType = LightType.POINT;
+      emitterLight.threeDLayer = true;
+      emitterLight.parent = nullLayer;
+      
+      var emitterPos = emitterLight.property("Position");
+      if (emitterPos) {
+        emitterPos.setValue([0, 0, 0]);
+      }
+      
+      // Create particle solid
+      var partSolid = comp.layers.addSolid([0, 0, 0], "Tripo4AE_Particles", comp.width, comp.height, comp.pixelAspect, comp.duration);
+      partSolid.threeDLayer = true;
+      
+      // Try Trapcode Particular
+      try {
+        partSolid.property("Effects").addProperty("Particular");
+      } catch (e) {
+        // Fallback: CC Particle World
+        try {
+          var particleWorld = partSolid.property("Effects").addProperty("CC Particle World");
+          if (particleWorld) {
+            var producerX = particleWorld.property("Producer X");
+            var producerY = particleWorld.property("Producer Y");
+            var producerZ = particleWorld.property("Producer Z");
+            
+            if (producerX) producerX.expression = "var target = thisComp.layer('" + nullLayer.name + "'); var p = target.toComp(target.anchorPoint); (p[0] - thisComp.width/2)/thisComp.width;";
+            if (producerY) producerY.expression = "var target = thisComp.layer('" + nullLayer.name + "'); var p = target.toComp(target.anchorPoint); (p[1] - thisComp.height/2)/thisComp.width;";
+            if (producerZ) producerZ.expression = "var target = thisComp.layer('" + nullLayer.name + "'); var p = target.toComp(target.anchorPoint); p[2]/thisComp.width;";
+          }
+        } catch (_) {}
+      }
+      createdLayer = partSolid;
+    }
+
+    app.endUndoGroup();
+    return JSON.stringify({ ok: true, data: { layerName: createdLayer ? createdLayer.name : null } });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
 
 
 

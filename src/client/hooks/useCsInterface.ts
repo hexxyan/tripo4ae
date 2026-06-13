@@ -298,6 +298,14 @@ export function useCsInterface() {
     [evalScript],
   );
 
+  const linkVfxToJointNull = useCallback(
+    (config: { nullName: string; type: 'light' | 'particular' }): Promise<any> => {
+      const json = escapeForEval(JSON.stringify(config));
+      return evalScript(`tripo4ae.linkVfxToJointNull('${json}')`);
+    },
+    [evalScript],
+  );
+
   return {
     evalScript,
     getActiveCompInfo,
@@ -327,5 +335,6 @@ export function useCsInterface() {
     toggleLayerProxy,
     createJointTrackingNull,
     importTextureToProject,
+    linkVfxToJointNull,
   };
 }

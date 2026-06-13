@@ -138,6 +138,72 @@ const HDR_INFO: Record<string, { desc: string, zhDesc: string, gradient: string 
   dikhololo_night: { desc: 'Starry Night Outdoor', zhDesc: '户外繁星夜空', gradient: 'linear-gradient(135deg, #0f2027 0%, #203a43 100%)' },
 };
 
+const PRESET_MATERIALS = [
+  { id: 'plastic', name: 'Plastic', gradient: 'linear-gradient(135deg, #7a7a7a 0%, #2b2b2b 100%)', values: { ambient: 0, diffuse: 80, specularIntensity: 50, specularShininess: 10, metal: 0, reflectionIntensity: 5, reflectionSharpness: 50, transparency: 0, indexOrRefraction: 1.5, lightTransmission: 0 } },
+  { id: 'metallic', name: 'Chrome', gradient: 'linear-gradient(135deg, #e0e0e0 0%, #a1a1a1 50%, #eeeeee 100%)', values: { ambient: 0, diffuse: 40, specularIntensity: 90, specularShininess: 80, metal: 100, reflectionIntensity: 80, reflectionSharpness: 90, transparency: 0, indexOrRefraction: 1.5, lightTransmission: 0 } },
+  { id: 'glass', name: 'Glass', gradient: 'linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(200,225,255,0.4) 50%, rgba(100,150,255,0.2) 100%)', values: { ambient: 0, diffuse: 10, specularIntensity: 90, specularShininess: 90, metal: 0, reflectionIntensity: 50, reflectionSharpness: 50, transparency: 85, indexOrRefraction: 1.5, lightTransmission: 90 } },
+  { id: 'gold', name: 'Gold', gradient: 'linear-gradient(135deg, #ffe066 0%, #f5b041 50%, #b37d14 100%)', values: { ambient: 0, diffuse: 50, specularIntensity: 95, specularShininess: 85, metal: 100, reflectionIntensity: 90, reflectionSharpness: 95, transparency: 0, indexOrRefraction: 1.5, lightTransmission: 0 } },
+  { id: 'matte', name: 'Matte Plastic', gradient: 'linear-gradient(135deg, #444444 0%, #111111 100%)', values: { ambient: 10, diffuse: 90, specularIntensity: 0, specularShininess: 0, metal: 0, reflectionIntensity: 0, reflectionSharpness: 50, transparency: 0, indexOrRefraction: 1.5, lightTransmission: 0 } },
+  { id: 'jade', name: 'Jade', gradient: 'linear-gradient(135deg, #58d68d 0%, #196f3d 100%)', values: { ambient: 10, diffuse: 60, specularIntensity: 40, specularShininess: 30, metal: 0, reflectionIntensity: 20, reflectionSharpness: 40, transparency: 10, indexOrRefraction: 1.61, lightTransmission: 20 } },
+  { id: 'copper', name: 'Brushed Copper', gradient: 'linear-gradient(135deg, #d35400 0%, #ba4a00 100%)', values: { ambient: 0, diffuse: 50, specularIntensity: 80, specularShininess: 60, metal: 100, reflectionIntensity: 70, reflectionSharpness: 40, transparency: 0, indexOrRefraction: 1.5, lightTransmission: 0 } },
+  { id: 'crystal', name: 'Crystal', gradient: 'linear-gradient(135deg, #e0f7fa 0%, #4dd0e1 50%, #00838f 100%)', values: { ambient: 0, diffuse: 5, specularIntensity: 100, specularShininess: 95, metal: 0, reflectionIntensity: 60, reflectionSharpness: 95, transparency: 90, indexOrRefraction: 2.0, lightTransmission: 95 } },
+];
+
+const PRESET_LIGHTING_RIGS = [
+  {
+    id: 'soft_studio',
+    name: 'Soft Studio',
+    desc: 'Bright Key, warm Fill, neutral Ambient',
+    descZH: '明亮主光，温暖辅光，中性环境光',
+    gradient: 'linear-gradient(135deg, #fff2e6 0%, #ffd9b3 50%, #ccd1d9 100%)',
+    config: {
+      keyColor: [1.0, 0.95, 0.9],
+      fillColor: [0.9, 0.85, 0.8],
+      ambientColor: [0.3, 0.3, 0.35],
+      intensity: 100
+    }
+  },
+  {
+    id: 'dramatic_rim',
+    name: 'Dramatic Rim',
+    desc: 'Orange-gold backlight, cool Fill, low Ambient',
+    descZH: '强橙金轮廓光，冷色辅光，低环境光',
+    gradient: 'linear-gradient(135deg, #ff8000 0%, #4a9eff 50%, #1a1a2e 100%)',
+    config: {
+      keyColor: [1.0, 0.6, 0.2],
+      fillColor: [0.3, 0.4, 0.6],
+      ambientColor: [0.1, 0.1, 0.15],
+      intensity: 120
+    }
+  },
+  {
+    id: 'cyberpunk_neon',
+    name: 'Cyberpunk Neon',
+    desc: 'Magenta Key, Cyan Fill, Purple Ambient',
+    descZH: '洋红主光，青色辅光，紫色环境光',
+    gradient: 'linear-gradient(135deg, #ff00ff 0%, #00ffff 100%)',
+    config: {
+      keyColor: [1.0, 0.0, 0.6],
+      fillColor: [0.0, 0.8, 1.0],
+      ambientColor: [0.2, 0.1, 0.3],
+      intensity: 110
+    }
+  },
+  {
+    id: 'moody_cinematic',
+    name: 'Moody Cinematic',
+    desc: 'Warm candlelight lamp, dark ambient',
+    descZH: '温暖烛光主灯，暗色辅光，暗环境光',
+    gradient: 'linear-gradient(135deg, #ff9933 0%, #331a00 50%, #0d0d0d 100%)',
+    config: {
+      keyColor: [1.0, 0.7, 0.4],
+      fillColor: [0.2, 0.15, 0.1],
+      ambientColor: [0.05, 0.05, 0.08],
+      intensity: 80
+    }
+  }
+];
+
 export function AnimationTab() {
   const apiKey = useStore((s) => s.apiKey);
   const pipeline = useStore((s) => s.pipeline);
@@ -152,6 +218,8 @@ export function AnimationTab() {
     applyAntiSlidingWalkSync,
     createJointTrackingNull,
     importTextureToProject,
+    linkVfxToJointNull,
+    createSmartMatchLightRig,
   } = csInterface;
   const { t, language } = useTranslation();
 
@@ -1064,7 +1132,8 @@ export function AnimationTab() {
 
   // Scene & Material state
   const [sceneError, setSceneError] = useState<string | null>(null);
-  const [matPreset, setMatPreset] = useState<MaterialPresetName>('plastic');
+  const [matPreset, setMatPreset] = useState<string>('plastic');
+  const [activeLightingPreset, setActiveLightingPreset] = useState<string>('soft_studio');
 
   // Helper to convert hex color to [R, G, B] in [0, 1] range
   const hexToRgbArray = useCallback((hexColor: string): [number, number, number] => {
@@ -1207,6 +1276,73 @@ export function AnimationTab() {
   const [pbrReflectionSharpness, setPbrReflectionSharpness] = useState(50);
   const [pbrTransparency, setPbrTransparency] = useState(0);
   const [pbrIndexOrRefraction, setPbrIndexOrRefraction] = useState(1.5);
+
+  const handleSelectMaterialPreset = useCallback(async (preset: typeof PRESET_MATERIALS[number]) => {
+    setMatPreset(preset.id);
+    
+    // Update sliders state instantly
+    const v = preset.values;
+    setPbrAmbient(v.ambient);
+    setPbrDiffuse(v.diffuse);
+    setPbrSpecularIntensity(v.specularIntensity);
+    setPbrSpecularShininess(v.specularShininess);
+    setPbrMetal(v.metal);
+    setPbrLightTransmission(v.lightTransmission);
+    setPbrReflectionIntensity(v.reflectionIntensity);
+    setPbrReflectionSharpness(v.reflectionSharpness);
+    setPbrTransparency(v.transparency);
+    setPbrIndexOrRefraction(v.indexOrRefraction);
+
+    // Apply properties to the layer instantly
+    setSceneError(null);
+    try {
+      await csInterface.setMaterialProperties({ material: v });
+    } catch (err: any) {
+      setSceneError(err.message || 'Apply material preset failed');
+    }
+  }, [
+    csInterface,
+    setPbrAmbient,
+    setPbrDiffuse,
+    setPbrSpecularIntensity,
+    setPbrSpecularShininess,
+    setPbrMetal,
+    setPbrLightTransmission,
+    setPbrReflectionIntensity,
+    setPbrReflectionSharpness,
+    setPbrTransparency,
+    setPbrIndexOrRefraction,
+  ]);
+
+  const handleApplyLightingRig = useCallback(async (preset: typeof PRESET_LIGHTING_RIGS[number]) => {
+    setActiveLightingPreset(preset.id);
+    setSceneError(null);
+    try {
+      await csInterface.createSmartMatchLightRig(preset.config);
+    } catch (err: any) {
+      setSceneError(err.message || 'Apply lighting rig failed');
+    }
+  }, [csInterface]);
+
+  const handleLinkVfx = useCallback(async (type: 'light' | 'particular') => {
+    setError(null);
+    setTrackingStatus(t('linkingVfx') || 'Linking VFX to Null...');
+    try {
+      const cleanBoneName = selectedJointBone.replace(/[^a-zA-Z0-9_]/g, '_');
+      const nullName = `Tripo4AE_${cleanBoneName}_Track`;
+      const result = await linkVfxToJointNull({ nullName, type });
+      const parsed = JSON.parse(result);
+      if (parsed && parsed.ok) {
+        setTrackingStatus(t('vfxSuccess') || 'VFX layer linked to joint Null!');
+      } else {
+        throw new Error(parsed.error || 'Failed to link VFX to Null.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error linking VFX.');
+    } finally {
+      setTimeout(() => setTrackingStatus(''), 4000);
+    }
+  }, [selectedJointBone, linkVfxToJointNull, t]);
 
   const handleApplyMaterial = useCallback(async () => {
     setSceneError(null);
@@ -1493,6 +1629,29 @@ export function AnimationTab() {
             {trackingStatus}
           </div>
         )}
+
+        {/* VFX Bridge Section */}
+        <div style={{ borderTop: '1px solid #2d3f55', marginTop: 8, paddingTop: 8 }}>
+          <div style={{ fontSize: 10, color: '#ffb300', fontWeight: 'bold', marginBottom: 4 }}>
+            ⚡ {t('linkVfxHeader')}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={() => handleLinkVfx('light')}
+              disabled={modelStepIdx < 0 || isTracking}
+              style={modelStepIdx < 0 ? { ...styles.actionBtnDisabled, flex: 1, padding: '5px 0' } : { ...styles.secondaryBtn, flex: 1, margin: 0, padding: '5px 0', fontSize: 9, color: '#ffb300', borderColor: '#5c4308' }}
+            >
+              💡 {t('linkLightBtn')}
+            </button>
+            <button
+              onClick={() => handleLinkVfx('particular')}
+              disabled={modelStepIdx < 0 || isTracking}
+              style={modelStepIdx < 0 ? { ...styles.actionBtnDisabled, flex: 1, padding: '5px 0' } : { ...styles.secondaryBtn, flex: 1, margin: 0, padding: '5px 0', fontSize: 9, color: '#ffb300', borderColor: '#5c4308' }}
+            >
+              ✨ {t('linkParticularBtn')}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* PBR Multi-Pass Map Exporter */}
@@ -1665,6 +1824,32 @@ export function AnimationTab() {
       <div style={styles.sectionBox}>
         <div style={styles.sectionTitle}>{t('sceneSetupTitle')}</div>
         <p style={styles.hint}>{t('sceneSetupHint')}</p>
+
+        {/* Studio Lighting Rigs Gallery */}
+        <div style={{ ...styles.fieldLabel, marginBottom: 8, marginTop: 4 }}>
+          <span style={{ fontSize: 10, color: '#ccc', fontWeight: 600, display: 'block', marginBottom: 6 }}>
+            {t('lightingGalleryHeader')}
+          </span>
+          <div style={styles.hdrGrid}>
+            {PRESET_LIGHTING_RIGS.map((p) => {
+              const isActive = activeLightingPreset === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => handleApplyLightingRig(p)}
+                  style={isActive ? styles.hdrCardActive : styles.hdrCard}
+                  title={p.name}
+                >
+                  <div style={{ ...styles.hdrColorBlock, background: p.gradient }} />
+                  <div style={styles.hdrCardInfo}>
+                    <div style={styles.hdrCardName}>{t(p.id)}</div>
+                    <div style={styles.hdrCardDesc}>{language === 'zh' ? p.descZH : p.desc}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
 
         {/* Collapsible Advanced Lights/Env Config */}
         <div
@@ -1850,24 +2035,33 @@ export function AnimationTab() {
 
       {/* Material Presets */}
       <div style={styles.sectionBox}>
-        <div style={styles.sectionTitle}>{t('advancedPbrHeader')}</div>
+        <div style={styles.sectionTitle}>{t('materialGalleryHeader')}</div>
         <p style={styles.hint}>{t('materialPresetHint')}</p>
-        <div style={styles.presetRow}>
-          {MATERIAL_PRESETS.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setMatPreset(p.value as MaterialPresetName)}
-              style={matPreset === p.value ? styles.presetBtnActive : styles.presetBtn}
-            >
-              {t(p.value)}
-            </button>
-          ))}
+        <div style={{ ...styles.fieldLabel, marginBottom: 8 }}>
+          <div style={styles.hdrGrid}>
+            {PRESET_MATERIALS.map((p) => {
+              const isActive = matPreset === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => handleSelectMaterialPreset(p)}
+                  style={isActive ? styles.hdrCardActive : styles.hdrCard}
+                  title={p.name}
+                >
+                  <div style={{ ...styles.hdrColorBlock, background: p.gradient }} />
+                  <div style={styles.hdrCardInfo}>
+                    <div style={styles.hdrCardName}>{t(p.id)}</div>
+                    <div style={styles.hdrCardDesc}>
+                      {language === 'zh' ? `金属: ${p.values.metal}% / 粗糙: ${Math.round(p.values.specularShininess)}%` : `Metal: ${p.values.metal}% / Rough: ${Math.round(p.values.specularShininess)}%`}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div style={styles.row}>
-          <button onClick={handleApplyMaterial} style={styles.actionBtn}>
-            {t('applyBtn')}
-          </button>
-          <button onClick={handleReadMaterial} style={styles.secondaryBtn}>
+          <button onClick={handleReadMaterial} style={{ ...styles.secondaryBtn, flex: 1 }}>
             {t('readCurrentBtn')}
           </button>
         </div>

@@ -23,6 +23,9 @@ import { PromptInput } from '../common/PromptInput';
 import { ProgressBar } from '../common/ProgressBar';
 import { ParameterPanel } from '../common/ParameterPanel';
 import { ImageUpload } from '../common/ImageUpload';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 
 type InputMode = 'text' | 'image' | 'multiview';
 
@@ -46,6 +49,232 @@ function filterParamsForVersion(
   if (!isP1(version)) return params;
   const { quad, geometry_quality, texture_quality, style, ...rest } = params;
   return rest;
+}
+
+interface InteractiveModelPreviewProps {
+  modelUrl: string;
+}
+
+export function InteractiveModelPreview({ modelUrl }: InteractiveModelPreviewProps) {
+  const mountRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let renderer: THREE.WebGLRenderer | null = null;
+    let scene: THREE.Scene | null = null;
+    let camera: THREE.PerspectiveCamera | null = null;
+    let controls: OrbitControls | null = null;
+    let animationFrameId: number | null = null;
+    const cleanups: Array<() => void> = [];
+
+    const init = async () => {
+      try {
+        if (!modelUrl) {
+          throw new Error('Model URL is empty.');
+        }
+
+        if (!active) return;
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color('#1a1a1a');
+
+        const width = mountRef.current?.clientWidth || 300;
+        const height = 240;
+        camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+        camera.position.set(0, 0, 5);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        
+        if (mountRef.current) {
+          mountRef.current.appendChild(renderer.domElement);
+        }
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxDistance = 50;
+        controls.minDistance = 0.5;
+
+        // CEP/CEF PointerEvent synthesis for OrbitControls drag-rotate
+        const canvasEl = renderer.domElement as HTMLCanvasElement & {
+          setPointerCapture: (id: number) => void;
+          releasePointerCapture: (id: number) => void;
+        };
+        canvasEl.setPointerCapture = () => {};
+        canvasEl.releasePointerCapture = () => {};
+
+        const canvas = renderer.domElement;
+        let realPointerDownSeen = false;
+        let isSynthesizing = false;
+        const onRealPointerDown = () => {
+          if (isSynthesizing) return;
+          realPointerDownSeen = true;
+        };
+        canvas.addEventListener('pointerdown', onRealPointerDown, { passive: true });
+        cleanups.push(() => canvas.removeEventListener('pointerdown', onRealPointerDown));
+
+        const synthesize = (mouseEvent: MouseEvent, type: string) => {
+          if (realPointerDownSeen && type === 'pointerdown') return;
+          isSynthesizing = true;
+          try {
+            canvas.dispatchEvent(new PointerEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              pointerId: 1,
+              pointerType: 'mouse',
+              isPrimary: true,
+              width: 1,
+              height: 1,
+              pressure: type === 'pointerdown' ? 0.5 : (mouseEvent.buttons ? 0.5 : 0),
+              clientX: mouseEvent.clientX,
+              clientY: mouseEvent.clientY,
+            }));
+          } catch (e) {
+            console.warn('[Tripo4AE] PointerEvent synthesis failed', e);
+          } finally {
+            isSynthesizing = false;
+          }
+        };
+
+        const onMouseDown = (e: MouseEvent) => synthesize(e, 'pointerdown');
+        const onMouseMove = (e: MouseEvent) => {
+          if (e.buttons) synthesize(e, 'pointermove');
+        };
+        const onMouseUp = (e: MouseEvent) => synthesize(e, 'pointerup');
+        canvas.addEventListener('mousedown', onMouseDown);
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        cleanups.push(() => {
+          canvas.removeEventListener('mousedown', onMouseDown);
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        });
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const loader = new GLTFLoader();
+        loader.load(
+          modelUrl,
+          (gltf) => {
+            if (!active || !scene) return;
+            const model = gltf.scene;
+
+            model.traverse((child) => {
+              if ((child as THREE.Mesh).isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+
+            scene.add(model);
+
+            const box = new THREE.Box3().setFromObject(model);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera!.fov * (Math.PI / 180);
+            let cameraZ = Math.abs(maxDim / 4 * Math.tan(fov * 2));
+            cameraZ *= 2.5; // zoom out a bit for nice fit
+
+            camera!.position.z = cameraZ;
+            const minCod = minDepth(box);
+            camera!.position.y = center.y;
+            camera!.lookAt(center);
+
+            controls!.target.copy(center);
+            controls!.update();
+
+            setLoading(false);
+          },
+          undefined,
+          (err: any) => {
+            if (!active) return;
+            setError(`Load 3D model failed: ${err.message || String(err)}`);
+            setLoading(false);
+          }
+        );
+
+        function minDepth(box: THREE.Box3) {
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          return box.min.y;
+        }
+
+        const animate = () => {
+          if (!active || !renderer || !scene || !camera || !controls) return;
+          animationFrameId = requestAnimationFrame(animate);
+          controls.update();
+          renderer.render(scene, camera);
+        };
+        animate();
+
+      } catch (err: any) {
+        if (!active) return;
+        setError(err.message || 'Initialization failed.');
+        setLoading(false);
+      }
+    };
+
+    init();
+
+    return () => {
+      active = false;
+      cleanups.forEach((cb) => cb());
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (controls) controls.dispose();
+      if (renderer) {
+        renderer.dispose();
+        try {
+          mountRef.current?.removeChild(renderer.domElement);
+        } catch (_) {}
+      }
+      if (scene) {
+        scene.traverse((object) => {
+          if (!(object instanceof THREE.Object3D)) return;
+          if ((object as THREE.Mesh).isMesh) {
+            const mesh = object as THREE.Mesh;
+            mesh.geometry.dispose();
+            if (Array.isArray(mesh.material)) {
+              mesh.material.forEach((mat) => mat.dispose());
+            } else {
+              mesh.material.dispose();
+            }
+          }
+        });
+      }
+    };
+  }, [modelUrl]);
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: 240, border: '1px solid #333', borderRadius: 4, overflow: 'hidden', backgroundColor: '#1a1a1a' }}>
+      <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+      {loading && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(26,26,26,0.8)', color: '#fff', fontSize: 10 }}>
+          🔄 Loading 3D Preview...
+        </div>
+      )}
+      {error && (
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(26,26,26,0.9)', color: '#ff6b6b', fontSize: 10, padding: 8, textAlign: 'center' }}>
+          ❌ {error}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function GenerateTab() {
@@ -756,13 +985,17 @@ export function GenerateTab() {
       {resultTask && (
         <div style={styles.section}>
           <div style={styles.previewHeader}>{t('resultHeader')}</div>
-          {resultTask.output?.rendered_image && (
+          {resultTask.output && (resultTask.output.pbr_model || resultTask.output.model || resultTask.output.base_model) ? (
+            <InteractiveModelPreview
+              modelUrl={resultTask.output.pbr_model || resultTask.output.model || resultTask.output.base_model || ''}
+            />
+          ) : resultTask.output?.rendered_image ? (
             <img
-              src={resultTask.output?.rendered_image}
+              src={resultTask.output.rendered_image}
               style={styles.previewImg}
               alt="Generated model preview"
             />
-          )}
+          ) : null}
           {(() => {
             const isAlreadyImported = models.some((m) => m.taskId === resultTask.task_id);
             return (
