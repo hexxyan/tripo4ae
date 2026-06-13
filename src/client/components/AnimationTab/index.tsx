@@ -34,6 +34,7 @@ import type {
 } from '../../../shared/types';
 import { ProgressBar } from '../common/ProgressBar';
 import { ModelSelector } from '../common/ModelSelector';
+import { RigWizard } from '../RigWizard';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
@@ -249,6 +250,8 @@ export function AnimationTab() {
   const [isExportingTextures, setIsExportingTextures] = useState<boolean>(false);
   const [exportingProgress, setExportingProgress] = useState<number>(0);
   const [exportingStatus, setExportingStatus] = useState<string>('');
+
+  const [showRigWizard, setShowRigWizard] = useState<boolean>(false);
 
   const getModelTaskId = useCallback(() => {
     return modelSteps[modelStepIdx]?.taskId ?? null;
@@ -1477,6 +1480,16 @@ export function AnimationTab() {
 
   return (
     <div style={styles.container}>
+      <button
+        onClick={() => setShowRigWizard(true)}
+        style={styles.rigWizardCTA}
+      >
+        🦴 {t('rigExternalModelBtn')}
+      </button>
+      {showRigWizard && (
+        <RigWizard onClose={() => setShowRigWizard(false)} />
+      )}
+
       {/* Model Selector */}
       <div style={styles.sectionBox}>
         <div style={styles.sectionTitle}>{t('sourceModelLabel')}</div>
@@ -2565,5 +2578,11 @@ const styles: Record<string, React.CSSProperties> = {
     paddingTop: 6,
     borderTop: '1px solid #333',
     marginTop: 4,
+  },
+  rigWizardCTA: {
+    padding: '8px 12px', fontSize: 11, fontWeight: 600,
+    backgroundColor: '#3d2a1a', border: '1px solid #8a5c2e', borderRadius: 4,
+    color: '#ffaa50', cursor: 'pointer', marginBottom: 8, width: '100%',
+    boxSizing: 'border-box' as const,
   },
 };
