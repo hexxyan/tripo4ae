@@ -34,6 +34,8 @@ import type {
 } from '../../../shared/types';
 import { ProgressBar } from '../common/ProgressBar';
 import { ModelSelector } from '../common/ModelSelector';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 // Animation categories for retarget
 interface AnimCategory {
@@ -143,10 +145,13 @@ export function AnimationTab() {
   const updatePipelineStep = useStore((s) => s.updatePipelineStep);
   const addModel = useStore((s) => s.addModel);
   const setBalance = useStore((s) => s.setBalance);
+  const models = useStore((s) => s.models);
   const csInterface = useCsInterface();
   const {
     hotSwapLayerSource,
-    applyAntiSlidingWalkSync
+    applyAntiSlidingWalkSync,
+    createJointTrackingNull,
+    importTextureToProject,
   } = csInterface;
   const { t, language } = useTranslation();
 
@@ -164,6 +169,18 @@ export function AnimationTab() {
   const [isSwapping, setIsSwapping] = useState<boolean>(false);
   const [swapProgress, setSwapProgress] = useState<number>(0);
   const [swapStatus, setSwapStatus] = useState<string>('');
+
+  // Joint Tracker & Texture Exporter State
+  const [availableBones, setAvailableBones] = useState<string[]>([]);
+  const [selectedJointBone, setSelectedJointBone] = useState<string>('mixamorig:Head');
+
+  const [isTracking, setIsTracking] = useState<boolean>(false);
+  const [trackingProgress, setTrackingProgress] = useState<number>(0);
+  const [trackingStatus, setTrackingStatus] = useState<string>('');
+
+  const [isExportingTextures, setIsExportingTextures] = useState<boolean>(false);
+  const [exportingProgress, setExportingProgress] = useState<number>(0);
+  const [exportingStatus, setExportingStatus] = useState<string>('');
 
   const getModelTaskId = useCallback(() => {
     return modelSteps[modelStepIdx]?.taskId ?? null;
@@ -263,6 +280,346 @@ export function AnimationTab() {
       setTimeout(() => setSwapStatus(''), 3000);
     }
   }, [walkSpeedRatio, applyAntiSlidingWalkSync, t]);
+
+  // Auto-scan bones when selected model changes
+  React.useEffect(() => {
+    const taskId = modelSteps[modelStepIdx]?.taskId;
+    if (!taskId) {
+      setAvailableBones([]);
+      return;
+    }
+    const modelRecord = models.find(m => m.taskId === taskId || m.id === taskId);
+    const modelPath = modelRecord?.modelPath;
+    if (!modelPath) {
+      setAvailableBones([]);
+      return;
+    }
+
+    const fs = (typeof window !== 'undefined' && (window as any).cep) ? (globalThis as any).require('fs') : null;
+    if (!fs || !fs.existsSync(modelPath)) return;
+
+    try {
+      const buffer = fs.readFileSync(modelPath);
+      const blob = new Blob([buffer], { type: 'model/gltf-binary' });
+      const blobUrl = URL.createObjectURL(blob);
+
+      const loader = new GLTFLoader();
+      loader.load(blobUrl, (gltf) => {
+        const bones: string[] = [];
+        gltf.scene.traverse((node) => {
+          if ((node as THREE.Bone).isBone) {
+            bones.push(node.name);
+          }
+        });
+        URL.revokeObjectURL(blobUrl);
+        if (bones.length > 0) {
+          setAvailableBones(bones);
+          const headBone = bones.find(b => b.toLowerCase().includes('head'));
+          const handBone = bones.find(b => b.toLowerCase().includes('hand'));
+          if (headBone) {
+            setSelectedJointBone(headBone);
+          } else if (handBone) {
+            setSelectedJointBone(handBone);
+          } else {
+            setSelectedJointBone(bones[0]);
+          }
+        } else {
+          setAvailableBones([
+            'mixamorig:Head',
+            'mixamorig:RightHand',
+            'mixamorig:LeftHand',
+            'mixamorig:RightFoot',
+            'mixamorig:LeftFoot',
+            'mixamorig:Hips'
+          ]);
+          setSelectedJointBone('mixamorig:Head');
+        }
+      }, undefined, (err) => {
+        console.error('[Tripo4AE] Error loading GLB for bone scan', err);
+        URL.revokeObjectURL(blobUrl);
+      });
+    } catch (e) {
+      console.error('[Tripo4AE] Error scanning bones', e);
+    }
+  }, [modelStepIdx, modelSteps, models]);
+
+  const handleExtractJoint = useCallback(async () => {
+    const taskId = getModelTaskId();
+    if (!taskId) {
+      setError(t('selectModelWarning') || 'Please select a model first');
+      return;
+    }
+    const modelRecord = models.find(m => m.taskId === taskId || m.id === taskId);
+    const modelPath = modelRecord?.modelPath;
+    if (!modelPath) {
+      setError('Model file path not found.');
+      return;
+    }
+
+    setError(null);
+    setIsTracking(true);
+    setTrackingProgress(10);
+    setTrackingStatus(t('extractingJoint') || 'Analyzing skeleton...');
+
+    const fs = (typeof window !== 'undefined' && (window as any).cep) ? (globalThis as any).require('fs') : null;
+    if (!fs || !fs.existsSync(modelPath)) {
+      setError('Node.js fs module is not available or file not found.');
+      setIsTracking(false);
+      return;
+    }
+
+    let blobUrl = '';
+    try {
+      const compInfo = await csInterface.getActiveCompInfo();
+      if (!compInfo) {
+        throw new Error('No active composition found. Please open a composition.');
+      }
+
+      setTrackingProgress(30);
+      const buffer = fs.readFileSync(modelPath);
+      const blob = new Blob([buffer], { type: 'model/gltf-binary' });
+      blobUrl = URL.createObjectURL(blob);
+
+      const loader = new GLTFLoader();
+      loader.load(blobUrl, async (gltf) => {
+        try {
+          const modelRoot = gltf.scene;
+          
+          // Find target bone
+          let targetBone: THREE.Object3D | null = null;
+          modelRoot.traverse((node) => {
+            if (node.name === selectedJointBone) {
+              targetBone = node;
+            }
+          });
+
+          if (!targetBone) {
+            throw new Error(`Bone "${selectedJointBone}" not found in model skeleton.`);
+          }
+
+          setTrackingProgress(50);
+          
+          // Get model bounding box size
+          const box = new THREE.Box3().setFromObject(modelRoot);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const threeSize = [size.x, size.y, size.z];
+
+          const sampleFps = compInfo.frameRate || 30;
+          let animDuration = compInfo.duration || 10;
+          let mixer: THREE.AnimationMixer | null = null;
+
+          if (gltf.animations && gltf.animations.length > 0) {
+            animDuration = gltf.animations[0].duration;
+            mixer = new THREE.AnimationMixer(modelRoot);
+            const action = mixer.clipAction(gltf.animations[0]);
+            action.play();
+          }
+
+          const totalDuration = Math.min(animDuration, compInfo.duration);
+          const totalFrames = Math.max(1, Math.round(totalDuration * sampleFps));
+          const keyframes: Array<{ time: number; value: number[] }> = [];
+
+          for (let f = 0; f < totalFrames; f++) {
+            const time = f / sampleFps;
+            if (mixer) {
+              mixer.setTime(time);
+            }
+            modelRoot.updateMatrixWorld(true);
+
+            const boneWorldPos = new THREE.Vector3();
+            (targetBone as THREE.Object3D).getWorldPosition(boneWorldPos);
+
+            const relativePos = boneWorldPos.clone();
+            modelRoot.worldToLocal(relativePos);
+
+            // X_ae = X_three, Y_ae = -Y_three, Z_ae = -Z_three
+            keyframes.push({
+              time: time,
+              value: [relativePos.x, -relativePos.y, -relativePos.z]
+            });
+          }
+
+          setTrackingProgress(80);
+          setTrackingStatus('Writing keyframes to AE tracker null...');
+
+          const cleanBoneName = selectedJointBone.replace(/[^a-zA-Z0-9_]/g, '_');
+          const result = await createJointTrackingNull({
+            nullName: `Tripo4AE_${cleanBoneName}_Track`,
+            keyframes,
+            threeSize
+          });
+
+          const parsed = JSON.parse(result);
+          if (parsed && parsed.ok) {
+            setTrackingProgress(100);
+            setTrackingStatus('Skeletal joint tracking Null created!');
+          } else {
+            throw new Error(parsed.error || 'Failed to create tracking Null in After Effects.');
+          }
+        } catch (innerErr: any) {
+          setError(innerErr.message || 'Error parsing bone animation.');
+        } finally {
+          setIsTracking(false);
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+          setTimeout(() => setTrackingStatus(''), 4000);
+        }
+      }, undefined, (loaderErr: any) => {
+        setError(`Failed to load GLB: ${loaderErr.message || String(loaderErr)}`);
+        setIsTracking(false);
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+      });
+
+    } catch (e: any) {
+      setError(e.message || 'Tracking failed.');
+      setIsTracking(false);
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    }
+  }, [selectedJointBone, getModelTaskId, models, createJointTrackingNull, csInterface, t]);
+
+  const handleExportTextures = useCallback(async () => {
+    const taskId = getModelTaskId();
+    if (!taskId) {
+      setError(t('selectModelWarning') || 'Please select a model first');
+      return;
+    }
+    const modelRecord = models.find(m => m.taskId === taskId || m.id === taskId);
+    const modelPath = modelRecord?.modelPath;
+    if (!modelPath) {
+      setError('Model file path not found.');
+      return;
+    }
+
+    setError(null);
+    setIsExportingTextures(true);
+    setExportingProgress(10);
+    setExportingStatus(t('exportingTextures') || 'Extracting embedded texture maps...');
+
+    const fs = (typeof window !== 'undefined' && (window as any).cep) ? (globalThis as any).require('fs') : null;
+    const nodePath = (typeof window !== 'undefined' && (window as any).cep) ? (globalThis as any).require('path') : null;
+    if (!fs || !nodePath || !fs.existsSync(modelPath)) {
+      setError('Node.js modules not available or file not found.');
+      setIsExportingTextures(false);
+      return;
+    }
+
+    let blobUrl = '';
+    try {
+      const buffer = fs.readFileSync(modelPath);
+      const blob = new Blob([buffer], { type: 'model/gltf-binary' });
+      blobUrl = URL.createObjectURL(blob);
+
+      setExportingProgress(30);
+
+      const loader = new GLTFLoader();
+      loader.load(blobUrl, async (gltf) => {
+        try {
+          const uniqueTextures: Array<{ matName: string; type: string; texture: THREE.Texture }> = [];
+          const seenTextures = new Set<string>();
+
+          gltf.scene.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mesh = child as THREE.Mesh;
+              const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+              materials.forEach((mat) => {
+                if (mat && (mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+                  const stdMat = mat as THREE.MeshStandardMaterial;
+                  const matName = stdMat.name || 'Material';
+
+                  const checkAndAdd = (type: string, tex: THREE.Texture | null) => {
+                    if (!tex || !tex.image) return;
+                    const key = `${matName}_${type}`;
+                    if (!seenTextures.has(key)) {
+                      seenTextures.add(key);
+                      uniqueTextures.push({ matName, type, texture: tex });
+                    }
+                  };
+
+                  checkAndAdd('Diffuse', stdMat.map);
+                  checkAndAdd('Normal', stdMat.normalMap);
+                  checkAndAdd('Roughness', stdMat.roughnessMap);
+                  checkAndAdd('Metalness', stdMat.metalnessMap);
+                  checkAndAdd('AO', stdMat.aoMap);
+                  checkAndAdd('Emissive', stdMat.emissiveMap);
+                }
+              });
+            }
+          });
+
+          if (uniqueTextures.length === 0) {
+            throw new Error('No embedded PBR textures found in the model.');
+          }
+
+          setExportingProgress(50);
+          const saveDir = nodePath.dirname(modelPath);
+          const modelName = nodePath.basename(modelPath, nodePath.extname(modelPath));
+
+          for (let i = 0; i < uniqueTextures.length; i++) {
+            const item = uniqueTextures[i];
+            const cleanMatName = item.matName.replace(/[^a-zA-Z0-9_]/g, '_');
+            const cleanType = item.type;
+            const fileName = `${modelName}_${cleanMatName}_${cleanType}.png`;
+            const fileSavePath = nodePath.join(saveDir, fileName);
+
+            setExportingStatus(`Saving ${cleanType} texture (${i + 1}/${uniqueTextures.length})...`);
+            
+            // Convert THREE.Texture image to canvas & save to PNG
+            await new Promise<void>((resolveSave, rejectSave) => {
+              try {
+                const img = item.texture.image as any;
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width || img.naturalWidth || 1024;
+                canvas.height = img.height || img.naturalHeight || 1024;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                  throw new Error('Failed to get 2D canvas context');
+                }
+                ctx.drawImage(img, 0, 0);
+                const dataUrl = canvas.toDataURL('image/png');
+                const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
+                fs.writeFileSync(fileSavePath, Buffer.from(base64Data, 'base64'));
+                resolveSave();
+              } catch (e) {
+                rejectSave(e);
+              }
+            });
+
+            // Import texture to AE Project
+            setExportingStatus(`Importing ${cleanType} map to AE Project...`);
+            const importRes = await importTextureToProject({
+              filePath: fileSavePath,
+              name: fileName
+            });
+            const parsed = JSON.parse(importRes);
+            if (!parsed || !parsed.ok) {
+              console.warn(`Failed to import ${fileName}: ${parsed?.error}`);
+            }
+
+            const pct = Math.floor(50 + (40 * (i + 1) / uniqueTextures.length));
+            setExportingProgress(pct);
+          }
+
+          setExportingProgress(100);
+          setExportingStatus(`Successfully exported ${uniqueTextures.length} textures!`);
+        } catch (innerErr: any) {
+          setError(innerErr.message || 'Error extracting textures.');
+        } finally {
+          setIsExportingTextures(false);
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+          setTimeout(() => setExportingStatus(''), 4000);
+        }
+      }, undefined, (loaderErr: any) => {
+        setError(`Failed to load GLB: ${loaderErr.message || String(loaderErr)}`);
+        setIsExportingTextures(false);
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+      });
+
+    } catch (e: any) {
+      setError(e.message || 'Texture export failed.');
+      setIsExportingTextures(false);
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    }
+  }, [getModelTaskId, models, importTextureToProject, t]);
 
   const importTaskToAe = useCallback(async (task: TripoTask, label: string, formatOverride?: string) => {
     if (importedTaskIds.current.has(task.task_id)) return;
@@ -1088,6 +1445,86 @@ export function AnimationTab() {
         )}
       </div>
 
+      {/* Skeletal Joint Tracker */}
+      <div style={styles.sectionBoxHotSwap}>
+        <div style={{ ...styles.sectionTitle, color: '#ffb300', fontWeight: 'bold' }}>
+          🦴 {t('jointTrackerHeader')}
+        </div>
+        <div style={styles.hint}>
+          {t('jointTrackerDesc')}
+        </div>
+
+        <label style={styles.fieldLabel}>
+          {t('selectBoneLabel')}
+          <select
+            value={selectedJointBone}
+            onChange={(e) => setSelectedJointBone(e.target.value)}
+            style={styles.select}
+            disabled={availableBones.length === 0}
+          >
+            {availableBones.length === 0 ? (
+              <option value="mixamorig:Head">mixamorig:Head (Scan model GLB...)</option>
+            ) : (
+              availableBones.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+
+        {isTracking ? (
+          <div style={{ padding: '6px 0' }}>
+            <ProgressBar progress={trackingProgress} status={trackingStatus} />
+          </div>
+        ) : (
+          <button
+            onClick={handleExtractJoint}
+            disabled={modelStepIdx < 0 || isTracking}
+            style={modelStepIdx < 0 ? styles.actionBtnDisabled : styles.actionBtnJointTracker}
+          >
+            {t('extractJointBtn')}
+          </button>
+        )}
+
+        {trackingStatus && !isTracking && (
+          <div style={{ fontSize: 9, color: '#ffb300', marginTop: 2 }}>
+            {trackingStatus}
+          </div>
+        )}
+      </div>
+
+      {/* PBR Multi-Pass Map Exporter */}
+      <div style={styles.sectionBoxHotSwap}>
+        <div style={{ ...styles.sectionTitle, color: '#8e24aa', fontWeight: 'bold' }}>
+          🎨 {t('textureExporterHeader')}
+        </div>
+        <div style={styles.hint}>
+          {t('textureExporterDesc')}
+        </div>
+
+        {isExportingTextures ? (
+          <div style={{ padding: '6px 0' }}>
+            <ProgressBar progress={exportingProgress} status={exportingStatus} />
+          </div>
+        ) : (
+          <button
+            onClick={handleExportTextures}
+            disabled={modelStepIdx < 0 || isExportingTextures}
+            style={modelStepIdx < 0 ? styles.actionBtnDisabled : styles.actionBtnTextureExporter}
+          >
+            {t('exportTexturesBtn')}
+          </button>
+        )}
+
+        {exportingStatus && !isExportingTextures && (
+          <div style={{ fontSize: 9, color: '#8e24aa', marginTop: 2 }}>
+            {exportingStatus}
+          </div>
+        )}
+      </div>
+
       {/* Prerigcheck */}
       <div style={styles.sectionBox}>
         <div style={styles.sectionTitle}>{t('checkRigLabel')}</div>
@@ -1906,6 +2343,26 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: 'pointer',
     marginTop: 4,
+  },
+  actionBtnJointTracker: {
+    padding: '6px 0',
+    border: 'none',
+    borderRadius: 3,
+    backgroundColor: '#ffb300',
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  actionBtnTextureExporter: {
+    padding: '6px 0',
+    border: 'none',
+    borderRadius: 3,
+    backgroundColor: '#8e24aa',
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 600,
+    cursor: 'pointer',
   },
   antiSlidingSection: {
     display: 'flex',

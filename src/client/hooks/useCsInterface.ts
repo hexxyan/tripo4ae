@@ -282,6 +282,22 @@ export function useCsInterface() {
     [evalScript],
   );
 
+  const createJointTrackingNull = useCallback(
+    (config: { nullName: string; parentLayerIndex?: number; keyframes: Array<{ time: number; value: number[] }>; threeSize?: number[] }): Promise<any> => {
+      const json = escapeForEval(JSON.stringify(config));
+      return evalScript(`tripo4ae.createJointTrackingNull('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const importTextureToProject = useCallback(
+    (config: { filePath: string; name: string }): Promise<any> => {
+      const json = escapeForEval(JSON.stringify(config));
+      return evalScript(`tripo4ae.importTextureToProject('${json}')`);
+    },
+    [evalScript],
+  );
+
   return {
     evalScript,
     getActiveCompInfo,
@@ -309,5 +325,7 @@ export function useCsInterface() {
     exportCurrentFrameToPng,
     createSmartMatchLightRig,
     toggleLayerProxy,
+    createJointTrackingNull,
+    importTextureToProject,
   };
 }

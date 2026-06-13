@@ -144,6 +144,15 @@ export const translations = {
     restoreOriginalBtn: 'Restore High-Poly Model (Render)',
     noProxyFoundWarning: 'No low-poly proxy found in this model\'s pipeline history.',
     switchingProxy: 'Switching model source...',
+    jointTrackerHeader: 'Skeletal Joint Tracker',
+    jointTrackerDesc: 'Extract the 3D path of a character\'s bone joint (e.g. hand, head) and create an AE Null tracked to it.',
+    selectBoneLabel: 'Select Joint Bone',
+    extractJointBtn: 'Extract Joint to 3D Null',
+    textureExporterHeader: 'PBR Multi-Pass Map Exporter',
+    textureExporterDesc: 'Extract embedded PBR texture maps (Diffuse, Normal, Roughness) and import them into the Project Panel.',
+    exportTexturesBtn: 'Export & Import Textures',
+    extractingJoint: 'Analyzing skeleton and extracting keyframes...',
+    exportingTextures: 'Extracting embedded texture maps...',
 
     // Library Tab
     libraryHeader: 'Model Library',
@@ -549,6 +558,15 @@ export const translations = {
     restoreOriginalBtn: '恢复高质模型 (渲染模式)',
     noProxyFoundWarning: '此模型历史记录中未检测到已简化的低模文件。',
     switchingProxy: '正在切换三维文件源...',
+    jointTrackerHeader: '3D 骨骼关节轨迹提取',
+    jointTrackerDesc: '提取三维角色特定骨骼关节（如手部、头部）的运动轨迹，并在 AE 中生成对应的追踪空图层，方便挂载粒子、文字或特效。',
+    selectBoneLabel: '选择骨骼关节',
+    extractJointBtn: '一键提取关节为 3D 空图层',
+    textureExporterHeader: 'PBR 多通道材质贴图导出',
+    textureExporterDesc: '将模型内置的 PBR 物理贴图（颜色、法线、粗糙度等）分离导出为独立图片并自动载入 AE 项目面板，以便在 Element 3D 等第三方插件中调用。',
+    exportTexturesBtn: '导出贴图并导入项目',
+    extractingJoint: '正在分析骨骼并提取运动关键帧...',
+    exportingTextures: '正在从三维模型中分离并导出贴图...',
 
     // Library Tab
     libraryHeader: '已下载模型库',

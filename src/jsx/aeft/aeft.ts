@@ -2009,6 +2009,129 @@ export function toggleLayerProxy(configJson: string): string {
   }
 }
 
+export function createJointTrackingNull(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var parentLayer = null;
+    var layerIdx = config.parentLayerIndex ? parseInt(config.parentLayerIndex, 10) : -1;
+    if (layerIdx > 0) {
+      parentLayer = comp.layer(layerIdx);
+    } else {
+      if (comp.selectedLayers.length > 0) {
+        parentLayer = comp.selectedLayers[0];
+      }
+    }
+
+    if (!parentLayer) {
+      return JSON.stringify({ ok: false, error: "Target parent model layer not selected or not found." });
+    }
+
+    app.beginUndoGroup("Tripo4AE Create Joint Tracking Null");
+
+    // Remove existing null with the same name if exists
+    var nullName = config.nullName || "Tripo4AE_Tracked_Null";
+    for (var j = comp.numLayers; j >= 1; j--) {
+      var lyr = comp.layer(j);
+      if (lyr.name === nullName) {
+        lyr.remove();
+      }
+    }
+
+    // Create a 3D Null
+    var nullLayer = comp.layers.addNull(comp.duration);
+    nullLayer.name = nullName;
+    nullLayer.threeDLayer = true;
+    nullLayer.parent = parentLayer;
+
+    var posProp = nullLayer.property("Position");
+    if (posProp) {
+      posProp.expression = "";
+      
+      // Calculate automatic scaling factor from Three.js meters to AE pixels
+      var rect = parentLayer.sourceRectAtTime(comp.time, false);
+      var scaleFactor = 100.0; // Default fallback: 1 unit = 100 pixels
+      if (config.threeSize && config.threeSize[1] > 0 && rect.height > 0) {
+        // Only use rect height if it's not matching comp width/height (which indicates fallback rect)
+        if (!(rect.width === comp.width && rect.height === comp.height)) {
+          scaleFactor = rect.height / config.threeSize[1];
+        }
+      }
+      
+      var keyframes = config.keyframes || [];
+      for (var i = 0; i < keyframes.length; i++) {
+        var kf = keyframes[i];
+        var scaledValue = [
+          kf.value[0] * scaleFactor,
+          kf.value[1] * scaleFactor,
+          kf.value[2] * scaleFactor
+        ];
+        posProp.setValueAtTime(kf.time, scaledValue);
+      }
+    }
+
+    app.endUndoGroup();
+    return JSON.stringify({ ok: true, data: { nullName: nullLayer.name, parent: parentLayer.name } });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+export function importTextureToProject(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var targetFile = new File(config.filePath);
+    if (!targetFile.exists) {
+      return JSON.stringify({ ok: false, error: "Texture file does not exist: " + config.filePath });
+    }
+
+    app.beginUndoGroup("Tripo4AE Import Texture");
+
+    // Check if texture is already in Project
+    var importedItem = null;
+    for (var i = 1; i <= app.project.numItems; i++) {
+      var item = app.project.item(i);
+      if (item instanceof FootageItem && item.file && item.file.fsName === targetFile.fsName) {
+        importedItem = item;
+        break;
+      }
+    }
+
+    if (!importedItem) {
+      importedItem = app.project.importFile(new ImportOptions(targetFile));
+      importedItem.name = config.name || targetFile.name;
+    }
+
+    // Find or create "Tripo4AE_Textures" folder
+    var folder = null;
+    for (var j = 1; j <= app.project.numItems; j++) {
+      var folderItem = app.project.item(j);
+      if (folderItem instanceof FolderItem && folderItem.name === "Tripo4AE_Textures") {
+        folder = folderItem;
+        break;
+      }
+    }
+
+    if (!folder) {
+      folder = app.project.items.addFolder("Tripo4AE_Textures");
+    }
+
+    importedItem.parentFolder = folder;
+
+    app.endUndoGroup();
+    return JSON.stringify({ ok: true, data: { itemName: importedItem.name, folderName: folder.name } });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+
 
 
 
