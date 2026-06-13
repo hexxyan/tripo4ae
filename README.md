@@ -13,7 +13,7 @@
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript" />
   <img alt="Tripo AI" src="https://img.shields.io/badge/Tripo-OpenAPI%20v2-orange" />
-  <img alt="Tests" src="https://img.shields.io/badge/tests-73%20passed-brightgreen" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-91%20passed-brightgreen" />
 </p>
 
 ---
@@ -26,7 +26,7 @@ Tripo4AE is an Adobe After Effects CEP extension panel that integrates [Tripo AI
 
 - Integrates **21** Tripo API endpoints.
 - **5** feature tabs covering the complete 3D pipeline.
-- **12** ExtendScript host functions driving the AE 3D scene DOM.
+- **22** ExtendScript host functions driving the AE 3D scene DOM.
 - Deep integration with **AE 2026 Advanced 3D** (Mercury 3D Engine).
 - Panel state persistence across reloads with task auto-resume.
 
@@ -49,6 +49,7 @@ Parameters: Model Version (v3.1, P1, Turbo, v3.0, v2.5), Face Limit, PBR, Quad, 
 - **Refining**: Upgrade a low-poly draft model into a high-quality asset.
 - **Re-texturing**: Generate new textures via text prompts, reference images, or style reference photos.
 - **PBR Upgrade**: Three levels of texture quality: standard, detailed, and extreme.
+- **PBR Map Exporter**: Extract embedded texture maps (Diffuse, Normal, Roughness, Metalness, AO, Emissive) from GLB materials and import them directly to the Project Panel.
 - **Part-based Texturing**: Individually texture specific parts based on mesh segmentation.
 - **Baking**: Bake advanced procedural/complex shaders down into base textures.
 
@@ -72,6 +73,9 @@ Parameters: Model Version (v3.1, P1, Turbo, v3.0, v2.5), Face Limit, PBR, Quad, 
 | Easing | Linear, Ease In/Out, Bounce, Elastic |
 | Model Alignment | Align Model to Ground, Align Ground to Model (using sourceRectAtTime) |
 | PBR Materials | Advanced PBR Material Options panel to read and apply 10 core PBR parameters |
+| Motion Hot-Swap | Duplicate footage item to isolate action, and hot-swap timeline animation GLB sources |
+| Walk Sync | Anti-sliding walk cycle expression to dynamically sync character speed with timeline travel |
+| Joint Tracker | Extract 3D skeletal joint motion paths (e.g. head, hands, feet) frame-by-frame as AE 3D Null keyframes |
 
 ### 🔧 Transformation (Transform)
 
@@ -82,6 +86,9 @@ Parameters: Model Version (v3.1, P1, Turbo, v3.0, v2.5), Face Limit, PBR, Quad, 
 | Mesh Completion | Reconstruct and complete missing mesh areas |
 | Mesh Simplification | Decimate faces, optional quad mesh output, High-Poly to Low-Poly normal baking |
 | Conversion | Export to FBX, OBJ, GLTF, USDZ, STL, 3MF (with target presets: Blender / 3ds Max / Mixamo) |
+| Matchmoving | Parent 3D model to AE solved tracking Null layers (Mocha AE / 3D Tracker) with one-click ground alignment and horizontal Shadow Catcher solids (Accepts Shadows: Only) |
+| Lighting Match | Extract Key, Fill, and Ambient colors from current frame image via client-side Canvas downsizer, and build matched 3-point light rig |
+| Viewport Proxy | Toggle between original high-poly and simplified low-poly proxy files seamlessly to prevent viewport lag during timeline navigation |
 
 ### 📚 Model Library (Library)
 

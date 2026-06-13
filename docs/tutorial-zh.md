@@ -185,6 +185,26 @@ API Key 会自动保存，下次打开面板无需重新输入。
 2. （可选）勾选 **Animate in Place** 让角色原地动画
 3. 点击 **Retarget**，带动作的模型自动导入 AE（Retarget 前需先完成 Rig 并选择 Rig 结果）。
 
+### 动作热重定向与防滑步幅同步
+
+当角色动作导入 AE 后，您可以快速热替换动作或解决移动时的滑步现象：
+1. **时间线快速动作热重定向 (Quick Motion Hot-Swap)**：在 Source Model 中选择当前模型，选中新动作（如跳舞、奔跑），点击 **“一键替换动作 (Apply Hot-Swap Action)”**。面板将自动调用接口、下载动作 GLB、复制项目素材以隔离图层，并一键完成源文件热替换。
+2. **防滑步移动同步 (Anti-Sliding Walk Sync)**：若您的角色在走动时“脚底打滑”，选中图层，使用滑块设定角色的位移速度，点击 **“应用防滑步位移同步 (Apply Anti-Sliding Walk Sync)”**。这将在图层的 Position 属性上注入智能表达式，动态匹配行走动画的速率与真实位移，消除滑步穿帮。
+
+### 3D 骨骼关节运动轨迹提取
+
+将模型动画中的骨骼运动轨迹转换为 AE 中的 3D 关键帧空图层：
+1. **自动扫描骨骼**：当您选中模型时，面板会在后台通过 Three.js 解析 GLB，并将骨骼列表中所有的骨头名称自动载入**“选择骨骼关节 (Select Joint Bone)”** 下拉列表中（若扫描失败会默认显示 `mixamorig:Head` 等标准骨头）。
+2. **一键生成追踪点**：在列表中选中您想要提取的骨骼（如 Head 头部、RightHand 右手、LeftFoot 左脚），点击 **“一键提取关节为 3D 空图层 (Extract Joint to 3D Null)”**。
+3. **坐标自适应对齐**：面板会自动获取 AE 当前合成的帧率与时间范围，通过 Three.js 逐帧计算出该骨头在三维坐标系下的全局位置。通过在 Y 和 Z 轴进行方向反转，并根据模型 AE 的包围盒高度计算出精确缩放比，最后自动在 AE 中生成一个绑定在此模型图层下的 3D Null 图层，并写入像素级位置关键帧。您可以在此 Null 图层上直接挂载 3D 粒子、灯光、文字或特技效果。
+
+### PBR 多通道材质贴图导出
+
+将 GLB 模型中封装 PBR 材质贴图单独提取并导入 AE：
+1. 选中对应的 Source Model，点击 **“导出贴图并导入项目 (Export & Import Textures)”**。
+2. 插件将自动解析模型中的 `MeshStandardMaterial`，提取出 Diffuse (颜色)、Normal (法线)、Roughness (粗糙度)、Metalness (金属度)、AO (环境光遮蔽) 以及 Emissive (自发光) 等通道贴图。
+3. 借助 HTML5 Canvas 将它们保存为 PNG 图片格式写在本地磁盘，然后调用 JSX 接口自动把这些贴图全部导入 AE 的项目面板，并统一归档在 `"Tripo4AE_Textures"` 文件夹下，方便在 Element 3D 等第三方贴图通道中直接调用。
+
 ---
 
 ## 7. 三维场景光影控制与 PBR 材质调节
@@ -256,6 +276,25 @@ API Key 会自动保存，下次打开面板无需重新输入。
    - **Texture Size**：纹理尺寸
    - **FBX Preset**（仅 FBX）：Blender / 3ds Max / Mixamo / Bake Scale
 3. 点击 **Convert**
+
+### 实景摄像机对齐与阴影捕捉 (Matchmoving & Compositing)
+
+将生成的 3D 模型与实景视频的摄像机追踪点对齐：
+1. **对齐并绑定追踪点 (Bind to Tracker)**：将 3D 模型图层作为子图层绑定到任意活动的 3D Tracker Null（如 Mocha AE 反求出的空图层或 AE 原生 3D 摄像机跟踪器的三维点）。在面板的 **“选择追踪图层 (Select Tracker Layer)”** 下拉框中选中该追踪 Null，点击 **“绑定对齐 (Align & Bind to Tracker)”**，模型图层的相对坐标将清零并完美锁定到追踪点。
+2. **生成阴影捕捉器 (Create Shadow Catcher)**：选中追踪图层，点击 **“生成阴影捕捉器 (Create Shadow Catcher)”**。插件会自动生成一个水平的 3D 固态层并建立父子级，该固态层已被预配置为 **“接受阴影：仅限 (Accepts Shadows: Only)”** 和 **“接受灯光：开启”**，能把 3D 模型落地的阴影无缝融合进实景视频中。
+
+### 智能光影匹配 (Intelligent Lighting Match)
+
+自动让 3D 模型的渲染光影融入实景视频的色彩中：
+1. 选中模型，点击 **“智能光影匹配 (Match Lighting)”**。
+2. 插件将自动把当前时间下的合成帧画面导出为临时 PNG 文件，在后台通过 HTML5 Canvas 提取画面的 Key Light (主光源色)、Fill Light (辅助光色)、Ambient Light (环境光色)，并自动在 AE 中构建匹配的三点光源预设组（`Tripo4AE_Smart_Key` 等），省去人眼对色的繁杂步骤。
+
+### 视口性能代理 (Viewport Performance Proxy)
+
+一键切换低模代理，彻底解决复杂模型在 AE 时间线实时预览和回放卡顿的问题：
+1. **生成低模**：在 Transform 标签页中先运行一次“网格简化 (Mesh Simplification / High-to-Low Poly)”生成简化后的低模。
+2. **开启代理**：在下拉框中选中模型，点击 **“Toggle Proxy”**，插件将自动将项目面板中对应图层的素材文件源热替换为简化的低模 GLB，提高合成预览回放帧率。
+3. **还原原模**：最终渲染导出前，点击 **“Restore Original”** 即可一键热替换回无损的高模，保证最终渲染的画质。
 
 ---
 

@@ -185,6 +185,26 @@ If you prefer micro-managing each step, you can use the traditional manual steps
 2. (Optional) Check **Animate in Place** to keep the character in position
 3. Click **Retarget** to download and import (requires a completed Rig model as Source).
 
+### Motion Hot-Swap & Anti-Sliding Walk Sync
+
+Once you have imported an animated model into your timeline, you can easily hot-swap animations or resolve walking slide-in issues:
+1. **Quick Motion Hot-Swap**: Select the model in the dropdown list, choose a new animation preset (e.g. dance, run), and click **"Apply Hot-Swap Action"**. The panel will call Tripo API to retarget the new motion, download the GLB, duplicate the project footage to isolate it, and replace the layer's source reference seamlessly.
+2. **Anti-Sliding Walk Sync**: If your character slides while walking, select the layer, set the walk speed ratio using the slider, and click **"Apply Anti-Sliding Walk Sync"**. This injects an expression on the Position property of the layer to dynamically sync translation with the animation pace, preventing foot sliding.
+
+### Skeletal Joint Tracker
+
+Extract 3D joint motion coordinates from the GLB skeleton and create an AE Null layer tracked to it:
+1. **Scan Skeleton**: When you select a model in the dropdown, the panel automatically parses the GLB skeleton and populates the **"Select Joint Bone"** list with all detected bone names (falling back to standard names like `mixamorig:Head`).
+2. **Extract Keyframes**: Choose a bone (e.g., Head, Right Hand) and click **"Extract Joint to 3D Null"**.
+3. **Coordinate Alignment**: The panel reads the AE composition's frame rate and duration, samples the bone's world coordinates frame-by-frame using Three.js, maps them to AE space (inverting Y and Z axes, and scaling based on the model's bounding box height), and writes them as position keyframes onto a parented 3D Null. You can now mount particle emitters, lights, or text layers directly to this Null.
+
+### PBR Multi-Pass Map Exporter
+
+Separate and export embedded textures from your GLB model:
+1. Select the model and click **"Export & Import Textures"**.
+2. The panel will scan all Standard Materials in the GLB, extract texture maps (Albedo/Diffuse, Normal, Roughness, Metallic, AO, Emissive), and render them to PNG files on your local drive using HTML5 canvas.
+3. It then automatically imports the saved PNGs into the AE Project Panel and groups them into a `"Tripo4AE_Textures"` folder for use in Element 3D or other shaders.
+
 ---
 
 ## 7. 3D Scene Controls & Lighting Settings
@@ -257,6 +277,25 @@ Export models to other formats:
    - **Texture Size**: Texture resolution
    - **FBX Preset** (FBX only): Blender / 3ds Max / Mixamo / Bake Scale
 3. Click **Convert**
+
+### Matchmoving & Compositing
+
+Align your generated 3D models with real-world camera tracks:
+1. **Bind to Tracker**: Parent your 3D model layer to any active 3D Tracker Null (e.g. from Mocha AE or AE 3D Camera Tracker). Select the Null in the **"Select Tracker Layer"** dropdown and click **"Align & Bind to Tracker"** to reset relative coordinates, locking the model to the tracking point.
+2. **Create Shadow Catcher**: Select a tracker layer and click **"Create Shadow Catcher"**. The plugin creates a horizontal solid layer parented to the tracker, setting its material options to **"Accepts Shadows: Only"** and **"Accepts Lights: On"** to blend shadows into video backgrounds.
+
+### Intelligent Lighting Match
+
+Automatically match the 3D model's lighting environment with the colors of your video frame:
+1. Select the model and click **"Match Lighting"**.
+2. The plugin will export the current frame of your active composition as a temporary PNG, analyze the pixel colors using HTML5 canvas, extract the Key Light, Fill Light, and Ambient Light colors, and construct a matched 3-point light rig (`Tripo4AE_Smart_Key`, `Fill`, `Ambient`) inside AE.
+
+### Viewport Performance Proxy
+
+Prevent viewport lag during timeline navigation by switching to a low-poly proxy:
+1. **Mesh Simplification**: Run a "Mesh Simplification (High-to-Low Poly)" task on your model under the Transform Tab.
+2. **Toggle Proxy**: Select the model in the dropdown list and click **"Toggle Proxy"**. The plugin replaces the layer's source reference in the Project Panel with the simplified low-poly proxy GLB.
+3. **Restore Original**: Click **"Restore Original"** to restore the full high-poly model source for final render.
 
 ---
 

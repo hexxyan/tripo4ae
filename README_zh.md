@@ -13,7 +13,7 @@
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript" />
   <img alt="Tripo AI" src="https://img.shields.io/badge/Tripo-OpenAPI%20v2-orange" />
-  <img alt="Tests" src="https://img.shields.io/badge/tests-73%20passed-brightgreen" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-91%20passed-brightgreen" />
 </p>
 
 ---
@@ -26,7 +26,7 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 
 - 覆盖 **21 个** Tripo API 端点
 - **5 个** 功能标签页覆盖完整工作流
-- **12 个** ExtendScript 宿主函数控制 AE 三维场景
+- **22 个** ExtendScript 宿主函数控制 AE 三维场景
 - 深度适配 **AE 2026 Advanced 3D**（Mercury 3D 引擎）
 - 面板重载不丢状态，任务自动恢复
 
@@ -49,6 +49,7 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 - **精修**：将草稿模型升级为高质量版本
 - **重贴图**：通过文本提示词 / 参考图 / 风格图重新生成纹理
 - **PBR 升级**：standard → detailed → extreme 三档精度
+- **PBR 贴图导出**：将模型内置的 PBR 贴图（颜色、法线、粗糙度、金属度、AO、自发光）分离导出为独立图片并自动载入 AE 项目面板
 - **分部件贴图**：基于网格分割结果，对指定部件单独贴图
 - **烘焙**：将高级材质合并为基础纹理
 
@@ -72,6 +73,9 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 | 缓动 | 线性、缓入缓出、弹跳、弹性 |
 | 模型对齐 | 对齐模型到地面、对齐地面到模型（基于 sourceRectAtTime 空间包围盒计算） |
 | PBR 材质控制 | Advanced PBR Material Options 精细面板，支持一键读取和回写 10 项材质滑块参数 |
+| 动作热重定向 | 复制项目素材以隔离图层，一键热替换时间线上的动作 GLB 源文件 |
+| 步幅同步 | 防滑步移动同步表达式，动态匹配行走速度与位移，消除穿帮滑步 |
+| 关节追踪器 | 帧级提取 3D 骨骼关节（如头、手、脚）位移轨迹，一键生成 AE 3D 追踪空图层关键帧 |
 
 ### 🔧 变换（Transform）
 
@@ -82,6 +86,9 @@ Tripo4AE 是一个 Adobe After Effects CEP 扩展插件，把 [Tripo AI](https:/
 | 网格补全 | 补全缺失部件 |
 | 高模转低模 | 简化面数，可选四边面 |
 | 格式转换 | FBX、OBJ、GLTF、USDZ、STL、3MF（含 FBX 预设：Blender/3ds Max/Mixamo） |
+| 实景对齐合成 | 对齐并绑定模型至 AE 摄像机反求追踪点，一键生成水平投影阴影捕捉图层 (Accepts Shadows: Only) |
+| 智能光影匹配 | Canvas 二次降采样提取当前帧高光/阴影/环境色，自动构建匹配的三点光源系统 |
+| 视口性能代理 | 原模与简化低模代理文件一键无缝切换，彻底解决复杂模型时间线预览卡顿问题 |
 
 ### 📚 模型库（Library）
 
