@@ -221,6 +221,67 @@ export function useCsInterface() {
     [evalScript],
   );
 
+  const getThreeDNullLayers = useCallback(
+    (): Promise<any> => evalScript('tripo4ae.getThreeDNullLayers()'),
+    [evalScript],
+  );
+
+  const bindModelToTracker = useCallback(
+    (config: { modelLayerIndex?: number; trackerLayerIndex: number }): Promise<any> => {
+      const json = escapeForEval(JSON.stringify(config));
+      return evalScript(`tripo4ae.bindModelToTracker('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const createShadowCatcher = useCallback(
+    (config: { trackerLayerIndex: number }): Promise<any> => {
+      const json = escapeForEval(JSON.stringify(config));
+      return evalScript(`tripo4ae.createShadowCatcher('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const hotSwapLayerSource = useCallback(
+    (config: { layerIndex?: number; newFilePath: string }): Promise<any> => {
+      const json = escapeForEval(JSON.stringify(config));
+      return evalScript(`tripo4ae.hotSwapLayerSource('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const applyAntiSlidingWalkSync = useCallback(
+    (config: { modelLayerIndex?: number; walkSpeedRatio: number }): Promise<any> => {
+      const json = escapeForEval(JSON.stringify(config));
+      return evalScript(`tripo4ae.applyAntiSlidingWalkSync('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const exportCurrentFrameToPng = useCallback(
+    (config: { tempPath: string }): Promise<any> => {
+      const json = escapeForEval(JSON.stringify(config));
+      return evalScript(`tripo4ae.exportCurrentFrameToPng('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const createSmartMatchLightRig = useCallback(
+    (config: { keyColor: number[]; fillColor: number[]; ambientColor: number[]; intensity: number }): Promise<any> => {
+      const json = escapeForEval(JSON.stringify(config));
+      return evalScript(`tripo4ae.createSmartMatchLightRig('${json}')`);
+    },
+    [evalScript],
+  );
+
+  const toggleLayerProxy = useCallback(
+    (config: { layerIndex?: number; targetFilePath: string }): Promise<any> => {
+      const json = escapeForEval(JSON.stringify(config));
+      return evalScript(`tripo4ae.toggleLayerProxy('${json}')`);
+    },
+    [evalScript],
+  );
+
   return {
     evalScript,
     getActiveCompInfo,
@@ -240,5 +301,13 @@ export function useCsInterface() {
     createParametricMesh,
     alignModelToGround,
     alignGroundToModel,
+    getThreeDNullLayers,
+    bindModelToTracker,
+    createShadowCatcher,
+    hotSwapLayerSource,
+    applyAntiSlidingWalkSync,
+    exportCurrentFrameToPng,
+    createSmartMatchLightRig,
+    toggleLayerProxy,
   };
 }

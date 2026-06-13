@@ -144,10 +144,125 @@ export function AnimationTab() {
   const addModel = useStore((s) => s.addModel);
   const setBalance = useStore((s) => s.setBalance);
   const csInterface = useCsInterface();
+  const {
+    hotSwapLayerSource,
+    applyAntiSlidingWalkSync
+  } = csInterface;
   const { t, language } = useTranslation();
 
   const importedTaskIds = useRef(new Set<string>());
   const pollerRef = useRef<TaskPoller | null>(null);
+
+  // Common state
+  const modelSteps = pipeline.filter((s) => s.status === 'success' && s.taskId);
+  const [modelStepIdx, setModelStepIdx] = useState(-1);
+  const [error, setError] = useState<string | null>(null);
+
+  // Hot-swap & anti-sliding Walk State & Callbacks
+  const [selectedHotSwapAnim, setSelectedHotSwapAnim] = useState<string>('preset:biped:walk');
+  const [walkSpeedRatio, setWalkSpeedRatio] = useState<number>(150);
+  const [isSwapping, setIsSwapping] = useState<boolean>(false);
+  const [swapProgress, setSwapProgress] = useState<number>(0);
+  const [swapStatus, setSwapStatus] = useState<string>('');
+
+  const getModelTaskId = useCallback(() => {
+    return modelSteps[modelStepIdx]?.taskId ?? null;
+  }, [modelStepIdx, modelSteps]);
+
+  const handleHotSwapAction = useCallback(async () => {
+    const taskId = getModelTaskId();
+    if (!taskId) {
+      setError(t('selectModelWarning'));
+      return;
+    }
+    setError(null);
+    setIsSwapping(true);
+    setSwapProgress(0);
+    setSwapStatus(t('swapping'));
+
+    try {
+      if (!apiKey) throw new Error(t('failedToConnect'));
+      const api = new TripoApiService(apiKey);
+
+      let originalRigTaskId = taskId;
+      const rigStep = [...pipeline].reverse().find(
+        (s) =>
+          s.type === 'animate_rig' &&
+          s.status === 'success' &&
+          s.taskId &&
+          (s.params as any)?.original_model_task_id === taskId
+      );
+      if (rigStep && rigStep.taskId) {
+        originalRigTaskId = rigStep.taskId;
+      }
+
+      const retargetReq = {
+        type: 'animate_retarget',
+        original_model_task_id: originalRigTaskId,
+        animations: [selectedHotSwapAnim],
+        out_format: 'glb',
+        animate_in_place: true,
+      };
+
+      const retargetTaskId = await api.createTask(retargetReq as any);
+      const poller = new TaskPoller({ getTask: (id) => api.getTask(id) });
+      pollerRef.current = poller;
+
+      const retargetResult = await poller.pollUntilDone(retargetTaskId, {
+        onProgress: (task) => {
+          setSwapProgress(task.progress);
+          setSwapStatus(`${t('swapping')}... ${task.progress}%`);
+        }
+      });
+
+      setSwapProgress(90);
+      setSwapStatus(t('statusDownloading'));
+      const saveDir = TripoApiService.getModelSaveDir();
+      const localPath = await api.downloadTaskResult(retargetResult, saveDir);
+
+      setSwapProgress(95);
+      setSwapStatus(t('importing'));
+      const result = await hotSwapLayerSource({
+        newFilePath: localPath,
+      });
+
+      const parsed = JSON.parse(result);
+      if (parsed && parsed.ok) {
+        setSwapStatus(`${t('statusSuccess')}: Swapped action!`);
+      } else {
+        throw new Error(parsed.error || 'Failed to replace layer source.');
+      }
+      setSwapProgress(100);
+    } catch (e: any) {
+      if (e instanceof CancelledError) return;
+      setError(e.message || 'Swap failed.');
+      setSwapStatus(t('statusFailed'));
+    } finally {
+      setIsSwapping(false);
+      pollerRef.current = null;
+      setTimeout(() => setSwapStatus(''), 3000);
+    }
+  }, [apiKey, selectedHotSwapAnim, getModelTaskId, modelStepIdx, modelSteps, hotSwapLayerSource, t]);
+
+  const handleApplyAntiSliding = useCallback(async () => {
+    setError(null);
+    setSwapStatus(t('applyingSync'));
+    try {
+      const result = await applyAntiSlidingWalkSync({
+        walkSpeedRatio,
+      });
+      const parsed = JSON.parse(result);
+      if (parsed && parsed.ok) {
+        setSwapStatus(`${t('statusSuccess')}: Applied walk sync!`);
+      } else {
+        setError(parsed.error || 'Failed to apply expression.');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Walk sync failed.');
+    } finally {
+      setTimeout(() => setSwapStatus(''), 3000);
+    }
+  }, [walkSpeedRatio, applyAntiSlidingWalkSync, t]);
 
   const importTaskToAe = useCallback(async (task: TripoTask, label: string, formatOverride?: string) => {
     if (importedTaskIds.current.has(task.task_id)) return;
@@ -222,10 +337,7 @@ export function AnimationTab() {
     }
   }, [apiKey, csInterface, addModel, setBalance, t]);
 
-  // Common state
-  const modelSteps = pipeline.filter((s) => s.status === 'success' && s.taskId);
-  const [modelStepIdx, setModelStepIdx] = useState(-1);
-  const [error, setError] = useState<string | null>(null);
+
 
   // Task execution helper
   const taskIdxRef = useRef(-1);
@@ -905,6 +1017,74 @@ export function AnimationTab() {
           >
             {t('magicAnimateBtn')}
           </button>
+        )}
+      </div>
+
+      {/* Timeline Quick Motion Hot-Swap & Anti-Sliding Walk Sync */}
+      <div style={styles.sectionBoxHotSwap}>
+        <div style={{ ...styles.sectionTitle, color: '#4a9eff', fontWeight: 'bold' }}>
+          🔄 {t('hotSwapHeader')}
+        </div>
+        <div style={styles.hint}>
+          {t('hotSwapDesc')}
+        </div>
+
+        <label style={styles.fieldLabel}>
+          {t('motionPresetLabel')}
+          <select
+            value={selectedHotSwapAnim}
+            onChange={(e) => setSelectedHotSwapAnim(e.target.value)}
+            style={styles.select}
+          >
+            {BIPED_ANIMATIONS.map((a) => (
+              <option key={a} value={a}>
+                {t(a)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {isSwapping ? (
+          <div style={{ padding: '6px 0' }}>
+            <ProgressBar progress={swapProgress} status={swapStatus} />
+          </div>
+        ) : (
+          <button
+            onClick={handleHotSwapAction}
+            disabled={modelStepIdx < 0}
+            style={modelStepIdx < 0 ? styles.actionBtnDisabled : styles.actionBtnHotSwap}
+          >
+            {t('applyHotSwapBtn')}
+          </button>
+        )}
+
+        {/* Anti-Sliding Walk Sync */}
+        <div style={styles.antiSlidingSection}>
+          <div style={{ ...styles.catLabel, color: '#bbb' }}>🏃‍♂️ {t('antiSlidingHeader')}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0' }}>
+            <input
+              type="range"
+              min={20}
+              max={500}
+              value={walkSpeedRatio}
+              onChange={(e) => setWalkSpeedRatio(Number(e.target.value))}
+              style={{ flex: 1, accentColor: '#2e7d32' }}
+            />
+            <span style={{ fontSize: 9, color: '#ccc', width: 30, textAlign: 'right' }}>{walkSpeedRatio}</span>
+          </div>
+          <button
+            onClick={handleApplyAntiSliding}
+            disabled={modelStepIdx < 0}
+            style={modelStepIdx < 0 ? styles.actionBtnDisabled : styles.actionBtnAntiSliding}
+          >
+            {t('applyAntiSlidingBtn')}
+          </button>
+        </div>
+
+        {swapStatus && !isSwapping && (
+          <div style={{ fontSize: 9, color: '#4a9eff', marginTop: 2 }}>
+            {swapStatus}
+          </div>
         )}
       </div>
 
@@ -1696,5 +1876,43 @@ const styles: Record<string, React.CSSProperties> = {
   hdrDownloadSpinner: {
     fontSize: 10,
     color: '#fff',
+  },
+  sectionBoxHotSwap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+    padding: 8,
+    border: '1px solid #1a3a5a',
+    borderRadius: 4,
+    backgroundColor: '#1b2633',
+  },
+  actionBtnHotSwap: {
+    padding: '6px 0',
+    border: 'none',
+    borderRadius: 3,
+    backgroundColor: '#00bcd4',
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  actionBtnAntiSliding: {
+    padding: '4px 0',
+    border: 'none',
+    borderRadius: 3,
+    backgroundColor: '#2e7d32',
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: 600,
+    cursor: 'pointer',
+    marginTop: 4,
+  },
+  antiSlidingSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+    paddingTop: 6,
+    borderTop: '1px solid #333',
+    marginTop: 4,
   },
 };

@@ -1648,3 +1648,368 @@ export function updateSceneProperties(configJson: string): string {
   }
 }
 
+export function getThreeDNullLayers(): string {
+  try {
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify([]);
+    }
+
+    var list: Array<{ index: number; name: string }> = [];
+    for (var i = 1; i <= comp.numLayers; i++) {
+      var layer = comp.layer(i);
+      if (layer.threeDLayer && (layer.nullLayer === true || (layer instanceof AVLayer && !layer.source))) {
+        list.push({ index: i, name: layer.name });
+      }
+    }
+    return JSON.stringify(list);
+  } catch (e) {
+    return JSON.stringify([]);
+  }
+}
+
+export function bindModelToTracker(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var trackerLayerIdx = parseInt(config.trackerLayerIndex, 10);
+    var modelLayerIdx = config.modelLayerIndex ? parseInt(config.modelLayerIndex, 10) : -1;
+
+    var trackerLayer = comp.layer(trackerLayerIdx);
+    if (!trackerLayer) {
+      return JSON.stringify({ ok: false, error: "Tracker layer not found" });
+    }
+
+    var modelLayer = null;
+    if (modelLayerIdx > 0) {
+      modelLayer = comp.layer(modelLayerIdx);
+    } else {
+      if (comp.selectedLayers.length > 0) {
+        modelLayer = comp.selectedLayers[0];
+      } else {
+        for (var i = 1; i <= comp.numLayers; i++) {
+          var l = comp.layer(i);
+          if (l.threeDLayer && !l.nullLayer && l !== trackerLayer) {
+            modelLayer = l;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!modelLayer) {
+      return JSON.stringify({ ok: false, error: "No target 3D model layer found to bind." });
+    }
+
+    app.beginUndoGroup("Bind Model to Tracker");
+    modelLayer.parent = trackerLayer;
+    modelLayer.property("Position").setValue([0, 0, 0]);
+    
+    if (modelLayer.property("Orientation")) {
+      modelLayer.property("Orientation").setValue([0, 0, 0]);
+    }
+    if (modelLayer.property("Rotation")) {
+      modelLayer.property("Rotation").setValue(0);
+    }
+    if (modelLayer.property("X Rotation")) modelLayer.property("X Rotation").setValue(0);
+    if (modelLayer.property("Y Rotation")) modelLayer.property("Y Rotation").setValue(0);
+    if (modelLayer.property("Z Rotation")) modelLayer.property("Z Rotation").setValue(0);
+    
+    app.endUndoGroup();
+    return JSON.stringify({ ok: true, data: { model: modelLayer.name, tracker: trackerLayer.name } });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+export function createShadowCatcher(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var trackerLayerIdx = parseInt(config.trackerLayerIndex, 10);
+    var trackerLayer = comp.layer(trackerLayerIdx);
+    if (!trackerLayer) {
+      return JSON.stringify({ ok: false, error: "Tracker layer not found" });
+    }
+
+    app.beginUndoGroup("Create Shadow Catcher");
+    
+    var catcher = comp.layers.addSolid([1, 1, 1], "Tripo_Shadow_Catcher", 2000, 2000, 1.0);
+    catcher.threeDLayer = true;
+    catcher.parent = trackerLayer;
+    
+    catcher.property("Position").setValue([0, 0, 0]);
+    if (catcher.property("Orientation")) {
+      catcher.property("Orientation").setValue([90, 0, 0]);
+    } else {
+      if (catcher.property("X Rotation")) catcher.property("X Rotation").setValue(90);
+    }
+
+    var matOpts = catcher.property("Material Options");
+    if (matOpts) {
+      var acceptsShadows = matOpts.property("Accepts Shadows") || matOpts.property("ADBE Material Accepts Shadows");
+      if (acceptsShadows) {
+        acceptsShadows.setValue(2); // Only
+      }
+      var acceptsLights = matOpts.property("Accepts Lights") || matOpts.property("ADBE Material Accepts Lights");
+      if (acceptsLights) {
+        acceptsLights.setValue(1); // On
+      }
+    }
+
+    app.endUndoGroup();
+    return JSON.stringify({ ok: true, data: { catcher: catcher.name, parent: trackerLayer.name } });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+export function hotSwapLayerSource(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var layerIdx = config.layerIndex ? parseInt(config.layerIndex, 10) : -1;
+    var layer = null;
+    if (layerIdx > 0) {
+      layer = comp.layer(layerIdx);
+    } else {
+      if (comp.selectedLayers.length > 0) {
+        layer = comp.selectedLayers[0];
+      }
+    }
+
+    if (!layer || !(layer instanceof AVLayer)) {
+      return JSON.stringify({ ok: false, error: "No selected or valid 3D model layer found to swap." });
+    }
+
+    var originalFootage = layer.source;
+    if (!originalFootage || !(originalFootage instanceof FootageItem)) {
+      return JSON.stringify({ ok: false, error: "Target layer has no replaceable footage source." });
+    }
+
+    var newFile = new File(config.newFilePath);
+    if (!newFile.exists) {
+      return JSON.stringify({ ok: false, error: "New GLB file not found on disk: " + config.newFilePath });
+    }
+
+    app.beginUndoGroup("Tripo4AE Hot-Swap Action");
+    
+    var duplicatedFootage = originalFootage.duplicate();
+    layer.replaceSource(duplicatedFootage, false);
+    duplicatedFootage.replace(newFile);
+    
+    app.endUndoGroup();
+    return JSON.stringify({ ok: true, data: { layer: layer.name, file: duplicatedFootage.name } });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+export function applyAntiSlidingWalkSync(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var layerIdx = config.modelLayerIndex ? parseInt(config.modelLayerIndex, 10) : -1;
+    var layer = null;
+    if (layerIdx > 0) {
+      layer = comp.layer(layerIdx);
+    } else {
+      if (comp.selectedLayers.length > 0) {
+        layer = comp.selectedLayers[0];
+      }
+    }
+
+    if (!layer) {
+      return JSON.stringify({ ok: false, error: "No target layer found." });
+    }
+
+    var speed = config.walkSpeedRatio !== undefined ? parseFloat(config.walkSpeedRatio) : 150.0;
+    
+    var targetProp = layer.property("Position");
+    if (!targetProp) {
+      return JSON.stringify({ ok: false, error: "Position property not found." });
+    }
+
+    app.beginUndoGroup("Apply Anti-Sliding Sync");
+    
+    targetProp.expression = 
+      "// Tripo4AE Anti-Sliding Walk Expression\n" +
+      "var speed = " + speed + ";\n" +
+      "var dir = [0, 0, -1]; // Move forward along Z axis\n" +
+      "var t = Math.max(0, time - inPoint);\n" +
+      "value + dir * t * speed;";
+
+    app.endUndoGroup();
+    return JSON.stringify({ ok: true, data: { layer: layer.name, speed: speed } });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+export function exportCurrentFrameToPng(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var file = new File(config.tempPath);
+    comp.saveFrameToPng(comp.time, file);
+
+    if (!file.exists) {
+      return JSON.stringify({ ok: false, error: "Failed to save frame PNG." });
+    }
+
+    return JSON.stringify({ ok: true, data: { path: config.tempPath } });
+  } catch (e) {
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+export function createSmartMatchLightRig(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var keyColor = config.keyColor || [1, 1, 1];
+    var fillColor = config.fillColor || [0.4, 0.4, 0.4];
+    var ambientColor = config.ambientColor || [0.2, 0.2, 0.2];
+    var intensity = config.intensity || 100;
+
+    app.beginUndoGroup("Tripo4AE Smart Match Light Rig");
+
+    var smartNames = ["Tripo4AE_Smart_Key", "Tripo4AE_Smart_Fill", "Tripo4AE_Smart_Ambient"];
+    for (var j = comp.numLayers; j >= 1; j--) {
+      var lyr = comp.layer(j);
+      for (var k = 0; k < smartNames.length; k++) {
+        if (lyr.name === smartNames[k]) {
+          lyr.remove();
+          break;
+        }
+      }
+    }
+
+    var cx = comp.width / 2;
+    var cy = comp.height / 2;
+    var dist = Math.max(comp.width, comp.height);
+
+    // 1. Create Key Light (Point Light, casts shadows)
+    var keyLight = comp.layers.addLight("Tripo4AE_Smart_Key", [cx + dist * 0.7, cy - dist * 0.6]);
+    keyLight.threeDLayer = true;
+    try { keyLight.lightType = LIGHT_TYPE_POINT; } catch (_) {}
+    keyLight.property("Position").setValue([cx + dist * 0.7, cy - dist * 0.6, -dist * 0.7]);
+    keyLight.property("Intensity").setValue(intensity);
+    keyLight.property("Color").setValue(keyColor);
+    
+    var keyOpts = keyLight.property("Light Options");
+    if (keyOpts) {
+      try { keyOpts.property(LIGHT_MAP.castsShadows).setValue(1); } catch (_) {}
+      try { keyOpts.property(LIGHT_MAP.shadowDarkness).setValue(40); } catch (_) {}
+      try { keyOpts.property(LIGHT_MAP.shadowDiffusion).setValue(10); } catch (_) {}
+    }
+
+    // 2. Create Fill Light (Point Light, no shadows)
+    var fillLight = comp.layers.addLight("Tripo4AE_Smart_Fill", [cx - dist * 0.5, cy - dist * 0.3]);
+    fillLight.threeDLayer = true;
+    try { fillLight.lightType = LIGHT_TYPE_POINT; } catch (_) {}
+    fillLight.property("Position").setValue([cx - dist * 0.5, cy - dist * 0.3, -dist * 0.4]);
+    fillLight.property("Intensity").setValue(intensity * 0.4);
+    fillLight.property("Color").setValue(fillColor);
+    
+    var fillOpts = fillLight.property("Light Options");
+    if (fillOpts) {
+      try { fillOpts.property(LIGHT_MAP.castsShadows).setValue(0); } catch (_) {}
+    }
+
+    // 3. Create Ambient Light (Ambient Light, no shadows)
+    var ambLight = comp.layers.addLight("Tripo4AE_Smart_Ambient", [cx, cy]);
+    ambLight.threeDLayer = true;
+    try { ambLight.lightType = LIGHT_TYPE_AMBIENT; } catch (_) {}
+    ambLight.property("Intensity").setValue(intensity * 0.3);
+    ambLight.property("Color").setValue(ambientColor);
+
+    app.endUndoGroup();
+
+    return JSON.stringify({
+      ok: true,
+      data: {
+        lights: ["Tripo4AE_Smart_Key", "Tripo4AE_Smart_Fill", "Tripo4AE_Smart_Ambient"]
+      }
+    });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+export function toggleLayerProxy(configJson: string): string {
+  try {
+    var config = JSON.parse(configJson);
+    var comp = app.project.activeItem;
+    if (!comp || !(comp instanceof CompItem)) {
+      return JSON.stringify({ ok: false, error: "No active composition" });
+    }
+
+    var layerIdx = config.layerIndex ? parseInt(config.layerIndex, 10) : -1;
+    var layer = null;
+    if (layerIdx > 0) {
+      layer = comp.layer(layerIdx);
+    } else {
+      if (comp.selectedLayers.length > 0) {
+        layer = comp.selectedLayers[0];
+      }
+    }
+
+    if (!layer || !(layer instanceof AVLayer)) {
+      return JSON.stringify({ ok: false, error: "No selected or valid 3D layer found to swap." });
+    }
+
+    var footage = layer.source;
+    if (!footage || !(footage instanceof FootageItem)) {
+      return JSON.stringify({ ok: false, error: "Target layer has no replaceable footage source." });
+    }
+
+    var targetFile = new File(config.targetFilePath);
+    if (!targetFile.exists) {
+      return JSON.stringify({ ok: false, error: "Target model file not found on disk: " + config.targetFilePath });
+    }
+
+    app.beginUndoGroup("Tripo4AE Toggle Viewport Proxy");
+    footage.replace(targetFile);
+    app.endUndoGroup();
+
+    return JSON.stringify({ ok: true, data: { footage: footage.name, file: targetFile.name } });
+  } catch (e) {
+    try { app.endUndoGroup(); } catch (_) {}
+    return JSON.stringify({ ok: false, error: String(e) });
+  }
+}
+
+
+
+
+
