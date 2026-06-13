@@ -474,3 +474,23 @@ export interface LightsConfig {
   coneAngle?: number;
   coneFeather?: number;
 }
+
+// === Rig Wizard ===
+
+export interface RigCheckResult {
+  riggable: boolean;
+  rigType: RigType;
+  message?: string;
+}
+
+export type RigWizardStep = 'select-model' | 'pre-rig-check' | 'select-animation' | 'execute';
+
+export interface AnimationExecutionState {
+  animationId: string;
+  animationName: string;
+  status: 'queued' | 'rigging' | 'retargeting' | 'downloading' | 'importing' | 'done' | 'failed';
+  progress: number;
+  error?: string;
+  resultTaskId?: string;
+  resultModelPath?: string;
+}
