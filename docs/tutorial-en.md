@@ -87,7 +87,7 @@ Open the **Generate** tab. Three input modes are available:
 
 ## 4. Importing into After Effects
 
-After generation completes, the result preview shows the generated 3D model.
+After generation completes, the result preview features an **Interactive WebGL 3D Preview Viewport**. You can left-click and drag to rotate the model, right-click and drag to pan, and scroll to zoom. This allows you to inspect the model's structure and geometry interactively from all angles before committing to import.
 
 Instead of selecting the import workflow before generating, **the import buttons are now shown dynamically on the completed model preview**. This allows you to inspect the generation quality before choosing how to load the asset:
 
@@ -197,6 +197,10 @@ Extract 3D joint motion coordinates from the GLB skeleton and create an AE Null 
 1. **Scan Skeleton**: When you select a model in the dropdown, the panel automatically parses the GLB skeleton and populates the **"Select Joint Bone"** list with all detected bone names (falling back to standard names like `mixamorig:Head`).
 2. **Extract Keyframes**: Choose a bone (e.g., Head, Right Hand) and click **"Extract Joint to 3D Null"**.
 3. **Coordinate Alignment**: The panel reads the AE composition's frame rate and duration, samples the bone's world coordinates frame-by-frame using Three.js, maps them to AE space (inverting Y and Z axes, and scaling based on the model's bounding box height), and writes them as position keyframes onto a parented 3D Null. You can now mount particle emitters, lights, or text layers directly to this Null.
+4. **VFX Bridge**: To automate attaching light sources or particles to the bone Null:
+   - **Link 3D Point Light**: Creates a new 3D Point Light layer aligned and parented to the extracted bone Null.
+   - **Link Particle Emitter**: Creates a particle emitter layer. If Trapcode Particular is installed, it adds a Point Light named `Emitter` parented to the Null, which Particular automatically registers as a particle emitter. If Particular is not found, it falls back to native **CC Particle World** and injects normalized coordinate expressions to align particle producers directly to the Null tracking path.
+
 
 ### PBR Multi-Pass Map Exporter
 
@@ -217,13 +221,16 @@ Under **"Scene Setup"** in the **Animation** tab, you can configure and dynamica
   - **Key Light Angle** & **Key Light Intensity**: Adjust key lamp brightness and rotation.
   - **Shadow Darkness** & **Shadow Diffusion (Softness)**: Adjust Key light projection properties.
 - **Visual HDR Card Gallery**: Instead of text dropdowns, choose from 8 royalty-free CC0 HDRI environments represented by gradient card swatches (Studio Soft, Sunset Glow, City Lights, Kiara Dawn, etc.) with description subtitles. Click a card to download and load it as the environment map.
+- **Studio Lighting Rigs Gallery**: Select from 4 visual card templates (Soft Studio, Dramatic Rim, Cyberpunk Neon, Moody Cinematic) with representative color gradients to instantly create standard three-point light setups in AE in one click.
 - **Auto Ground Alignment**: The ground plane is automatically aligned to the bottom boundary of the first 3D model layer in the comp, removing the need for manual alignment.
 
 > **Note**: You must Rig first, then select the Rig result as the Source Model before Retargeting.
 
 ### Step 4: Advanced PBR Material Controls (Advanced PBR Material Options)
 
-For imported Native 3D layers, you can fine-tune PBR materials dynamically in the **Advanced PBR Material Options** section at the bottom of the **Animation** tab.
+For imported Native 3D layers, you can choose PBR material presets or fine-tune properties dynamically at the bottom of the **Animation** tab.
+
+- **Visual PBR Material Presets Gallery**: Click a card template (Glass, Chrome, Gold, Matte Plastic, Jade, Brushed Copper, etc.) representing physical materials to instantly apply PBR properties to your layer. The sliders will automatically sync with the preset's exact settings (e.g. 100% metal for Chrome, 85% transparency and 1.5 IOR for Glass).
 
 > [!WARNING]
 > **GLB Material Limitation**: Imported GLB models usually have baked-in textures. AE's native PBR material sliders (such as metal, roughness, diffuse, etc.) *do not* override baked texture maps. Tweak options will only visually affect areas without baked textures, or apply baseline offsets. A notice is provided in the UI for clarity.
