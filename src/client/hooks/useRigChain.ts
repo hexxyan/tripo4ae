@@ -89,8 +89,8 @@ export function useRigChain() {
 
     const poller = new TaskPoller({ getTask: (id) => api.getTask(id) });
     const rigTask = await poller.pollUntilDone(rigTaskId, {
-      onProgress: (p) => {
-        const scaled = 5 + Math.floor(p * 20);
+      onProgress: (task) => {
+        const scaled = 5 + Math.floor((task.progress / 100) * 20);
         for (const s of states) {
           if (s.status === 'rigging') s.progress = scaled;
         }
@@ -122,8 +122,8 @@ export function useRigChain() {
         });
 
         const retargetTask: TripoTask = await poller.pollUntilDone(retargetTaskId, {
-          onProgress: (p) => {
-            state.progress = 25 + Math.floor(p * 50);
+          onProgress: (task) => {
+            state.progress = 25 + Math.floor((task.progress / 100) * 50);
             params.onProgress?.([...states]);
           },
         });
