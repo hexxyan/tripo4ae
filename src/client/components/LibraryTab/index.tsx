@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { ThumbnailImage } from '../common/ThumbnailImage';
+import { RigWizard } from '../RigWizard';
 
 export function LibraryTab() {
   const models = useStore((s) => s.models);
@@ -28,6 +29,7 @@ export function LibraryTab() {
   const [importingId, setImportingId] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [previewModel, setPreviewModel] = useState<ModelRecord | null>(null);
+  const [rigWizardModel, setRigWizardModel] = useState<ModelRecord | null>(null);
 
   // External import
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -408,6 +410,15 @@ export function LibraryTab() {
                     👁️
                   </button>
                 )}
+                {model.modelPath && (
+                  <button
+                    onClick={() => setRigWizardModel(model)}
+                    style={styles.rigBtn}
+                    title={t('rigAnimateCardBtn')}
+                  >
+                    🦴
+                  </button>
+                )}
                 <button
                   onClick={() => handleReimport(model)}
                   disabled={importingId === model.id}
@@ -552,6 +563,13 @@ export function LibraryTab() {
           modelPath={previewModel.modelPath!}
           modelName={previewModel.name}
           onClose={() => setPreviewModel(null)}
+        />
+      )}
+
+      {rigWizardModel && (
+        <RigWizard
+          initialModelId={rigWizardModel.id}
+          onClose={() => setRigWizardModel(null)}
         />
       )}
     </div>
@@ -702,6 +720,15 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #555',
     borderRadius: 3,
     color: '#ccc',
+    cursor: 'pointer',
+  },
+  rigBtn: {
+    padding: '3px 6px',
+    fontSize: 9,
+    backgroundColor: '#3d2a1a',
+    border: '1px solid #8a5c2e',
+    borderRadius: 3,
+    color: '#ffaa50',
     cursor: 'pointer',
   },
 };
